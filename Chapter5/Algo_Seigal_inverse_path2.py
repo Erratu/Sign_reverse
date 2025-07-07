@@ -16,6 +16,19 @@ import scipy.sparse.linalg as spla
 class SeigalAlgo:
     
     def __init__(self, TS, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, decal_length = 1):
+        """initialize the inversion algorithm
+
+        Args:
+            TS (ndarray): Time Serie to find
+            len_base (int): the number of base functions
+            chan (int): number of channels of the time series
+            real_chan (int): deprecated
+            depth (int): depth of the signature
+            n_recons (int): deprecated
+            size_base (int): size of the base
+            time_chan (bool, optional): indicates if we have time augmentation. Defaults to True.
+            decal_length (int, optional): _description_. Defaults to 1.
+        """
         self.len_base = len_base
         self.chan = chan
         self.T = np.linspace(start = 0, stop = 1, num = TS.shape[-2])
@@ -30,6 +43,16 @@ class SeigalAlgo:
 
         
     def define_base(self, base_name, T_original = False, order = 3):
+        """_summary_
+
+        Args:
+            base_name (str): type of the base
+            T_original (bool, optional): If true, we keep the original time grid. Defaults to False.
+            order (int, optional): _description_. Defaults to 3.
+
+        Returns:
+            ndarray: base created
+        """
         if T_original:
             T= self.T
         else:
@@ -80,196 +103,206 @@ class SeigalAlgo:
         return(torch.from_numpy(base))
 
 
-    def retrieve_coeff_base(self, base, par, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,1,1]):
-        
+    def retrieve_coeff_base(self, base, par, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0]):
+        """ Retrieve A from depth 3 signature.
+
+        Args:
+            base (_type_): _description_
+            par (int): deprecated
+            lrs (float, optional): Learning rate. Defaults to 1e-3.
+            limits (int, optional): Number of iterations for optimisation. Defaults to 1e4.
+            opt (str, optional): "Adam", "AdamW" or "LBFGS", selected optimizer. Defaults to "AdamW".
+            eps (_type_, optional): _description_. Defaults to 1e-10.
+            params (list, optional): params are [lambda_length, lambda_frontier, lambda_levy, lambda_ridge].
+            [1,5,0,1] , [5,1,0,1] or the same with lambda_ridge = 0 worked well. Defaults to [1,5,0,0].
+
+        Raises:
+            ValueError: _description_
+            ValueError: _description_
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
     
-       L_control_coeff, bord_control_coeff, LA_control_coeff, ridge_coeff = params
+        L_control_coeff, bord_control_coeff, LA_control_coeff, ridge_coeff = params
        
        
-       if torch.cuda.is_available():
+        if torch.cuda.is_available():
            device = 'cuda'
            dtype = torch.cuda.FloatTensor
-       else:
+        else:
            device = 'cpu'
            dtype = torch.FloatTensor
     
-       print("Using "+device)
+        print("Using "+device)
         
-       loss1 = nn.MSELoss().to(device)
+        loss1 = nn.MSELoss().to(device)
        
        
-       ########## On calcule les différentes signatures
-       signature_TS = Signature(depth = self.depth,scalar_term= True).to(device)
+        ########## On calcule les différentes signatures
+        signature_TS = Signature(depth = self.depth,scalar_term= True).to(device)   
+        signature_base = Signature(depth = self.depth).to(device)
 
-       signature_base = Signature(depth = self.depth).to(device)
-       
-       ### Sig_TS est une collection de tenseurs
-       sig_TS = signature_TS(self.TS.to(device))
+        ### Sig_TS est une collection de tenseurs
+        sig_TS = signature_TS(self.TS.to(device))   
+        sig_base = signature_base(base) 
+
+        def unflatten_sig(sig):
+            sig_unflat = [torch.empty([self.len_base]*(i+1)) for i in range(self.depth)]
+            words = all_words(self.len_base, self.depth)
+            for i in range(len(words)):
+                deg = len(words[i])
+                sig_unflat[deg-1][words[i]] = sig[i]
+            return sig_unflat
+
+        def unflatten_sig2(sig):
+            sig_unflat = [np.empty(1) for i in range(self.depth)]
+            start = 0
+            stop = self.len_base
+            for k in range(self.depth):
+                sig_unflat[k] = sig[0,start:stop].unflatten(0,[self.len_base]*(k+1))
+                start = stop
+                stop = start + self.len_base**(k+2)
+            return sig_unflat
 
 
-       sig_base = signature_base(base)
 
-       
-       def unflatten_sig(sig):
-           sig_unflat = [torch.empty([self.len_base]*(i+1)) for i in range(self.depth)]
-           words = all_words(self.len_base, self.depth)
-           for i in range(len(words)):
-               deg = len(words[i])
-               sig_unflat[deg-1][words[i]] = sig[i]
-           return sig_unflat
-       
-       def unflatten_sig2(sig):
-           sig_unflat = [np.empty(1) for i in range(self.depth)]
-           start = 0
-           stop = self.len_base
-           for k in range(self.depth):
-               sig_unflat[k] = sig[0,start:stop].unflatten(0,[self.len_base]*(k+1))
-               start = stop
-               stop = start + self.len_base**(k+2)
-           return sig_unflat
-       
-        
-       
-       sig_base_unf = unflatten_sig2(sig_base.type(dtype))
-       
-       d=self.chan
-       sig_TS_unf = [sig_TS[:,1:d+1],sig_TS[:,d+1:d+d**2+1].unflatten(dim=-1,sizes = (d,d)),sig_TS[:,d+d**2+1:d+d**2+d**3+1].unflatten(dim=-1,sizes = (d,d,d))]
+        sig_base_unf = unflatten_sig2(sig_base.type(dtype))
 
-       #LA3_TS = sig_TS[2].permute(0,2,1,3)+sig_TS[2].permute(0,2,3,1)-sig_TS[2].permute(0,3,1,2)-sig_TS[2].permute(0,3,2,1)
-       
-       #LA4_TS = torch.kron(sig_TS[0],LA3_TS)
+        d=self.chan
+        sig_TS_unf = [sig_TS[:,1:d+1],sig_TS[:,d+1:d+d**2+1].unflatten(dim=-1,sizes = (d,d)),sig_TS[:,d+d**2+1:d+d**2+d**3+1].unflatten(dim=-1,sizes = (d,d,d))]    
+        #LA3_TS = sig_TS[2].permute(0,2,1,3)+sig_TS[2].permute(0,2,3,1)-sig_TS[2].permute(0,3,1,2)-sig_TS[2].permute(0,3,2,1)
 
-       def mode_dot(x, m, mode):
-          #x = np.asarray(x)
-          #m = np.asarray(m)
-          if mode % 1 != 0:
-              raise ValueError('`mode` must be an interger')
-          if x.ndim < mode:
-              raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
-          if m.ndim != 2:
-              raise ValueError('Invalid shape of M: {}'.format(m.shape))
-          return torch.swapaxes(torch.tensordot(torch.swapaxes(x, mode, -1),m.T,dims = 1), mode, -1)
-      
-       def multi_mode_dot(x,m,n):
-          MMD = x.T
-          for i in range(n):
-              MMD = mode_dot(MMD,m,mode = i)
-          return MMD.T
-      
-       def lengthA(A):
-           return torch.sum(torch.norm(A[:,self.decal_length:],dim = 1))
+        #LA4_TS = torch.kron(sig_TS[0],LA3_TS)  
+        def mode_dot(x, m, mode):
+           #x = np.asarray(x)
+           #m = np.asarray(m)
+           if mode % 1 != 0:
+               raise ValueError('`mode` must be an interger')
+           if x.ndim < mode:
+               raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
+           if m.ndim != 2:
+               raise ValueError('Invalid shape of M: {}'.format(m.shape))
+           return torch.swapaxes(torch.tensordot(torch.swapaxes(x, mode, -1),m.T,dims = 1), mode, -1)
 
-    
-       def final_points(A,B):
+        def multi_mode_dot(x,m,n):
+           MMD = x.T
+           for i in range(n):
+               MMD = mode_dot(MMD,m,mode = i)
+           return MMD.T
 
-            RS = torch.matmul(B.float(),A.T)[0]
-            checkpoints = RS[[0,-1]]
-            return checkpoints.to(device)
-        
-       def flatten_MMD(MMD):
-           chan_sig = signature_channels(self.chan, self.depth,scalar_term=True)
-           sig_flat = torch.ones(chan_sig)
-           words = all_words(self.chan, self.depth)
-           for k in range(chan_sig-1):
-               deg = len(words[k])
-               sig_flat[k+1] = MMD[deg-1][words[k]]
-           return sig_flat
-       
-           
-       def error_func(A,par):
-            
-            #B = torch.cat((torch.tensor(self.T_basis).float().to(device),A),dim = 0).flip([-2]).float()
-            
-            #### On calcule [C,A,A,...,A] pour k<= 3
-            MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
-            MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
-            
-          ### Objectif 0
-            sig_control = torch.norm(signature_combine(MMD_flat.float(),sig_TS.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
-            error = sig_control
-            
-            ### Contrainte de longueur
-            if self.time_chan:
-                i=1
+        def lengthA(A):
+            return torch.sum(torch.norm(A[:,self.decal_length:],dim = 1))   
+
+        def final_points(A,B):  
+             RS = torch.matmul(B.float(),A.T)[0]
+             checkpoints = RS[[0,-1]]
+             return checkpoints.to(device)
+
+        def flatten_MMD(MMD):
+            chan_sig = signature_channels(self.chan, self.depth,scalar_term=True)
+            sig_flat = torch.ones(chan_sig)
+            words = all_words(self.chan, self.depth)
+            for k in range(chan_sig-1):
+                deg = len(words[k])
+                sig_flat[k+1] = MMD[deg-1][words[k]]
+            return sig_flat
+
+
+        def error_func(A,par):
+
+             #B = torch.cat((torch.tensor(self.T_basis).float().to(device),A),dim = 0).flip([-2]).float()
+
+             #### On calcule [C,A,A,...,A] pour k<= 3
+             MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
+             MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
+
+           ### Objectif 0
+             sig_control = torch.norm(signature_combine(MMD_flat.float(),sig_TS.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
+             error = sig_control
+
+             ### Contrainte de longueur
+             if self.time_chan:
+                 i=1
+             else:
+                 i=0
+             L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
+             error = error+L_control
+
+             ### controle de bords:
+             points = final_points(A,base.flip([-2,-1]).to(device))
+             val_to_reach = torch.tensor([sig_TS_unf[2][0,i,i,i] for i in range(self.chan)])
+             val_to_move = ((points[-1]-points[0])**3)/6
+             bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
+             error = error+bord_control
+
+             ### Controle Levy Area
+             LA_MMD = 0.5*(MMD[1]-MMD[1].T)
+             LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
+             LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
+             error = error + LA_control
+             return error+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
+
+        A = torch.randn([self.chan,self.len_base], requires_grad=True)
+
+        if opt == "AdamW":
+                optimizer = optim.AdamW([A], lr = lrs)
+        if opt == "Adam":
+                optimizer = optim.Adam([A], lr = lrs)
+        if opt == "LBFGS":
+                optimizer = optim.LBFGS([A], lr=lrs)
+
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 1000)
+            #loss = nn.MSELoss()
+            #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
+            #list_A = []
+        i = 0
+        loss_ref = np.inf
+        A_temp = np.zeros(shape = (1))
+
+        par = 0.01
+
+        while i<limits and loss_ref > eps :
+            print(f'Step {i}')
+            if opt != "LBFGS":
+              optimizer.zero_grad()
+              #MMD = model.forward(A)   
+              loss_val = error_func(A.type(dtype),par).to(device)
+              loss_val.backward()
+              optimizer.step()
+              loss_value = loss_val.clone().detach()
+              sched.step(loss_val)
+              for param_group in optimizer.param_groups:
+                  print(param_group['lr'])
             else:
-                i=0
-            L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
-            error = error+L_control
-            
-            ### controle de bords:
-            points = final_points(A,base.flip([-2,-1]).to(device))
-            val_to_reach = torch.tensor([sig_TS_unf[2][0,i,i,i] for i in range(self.chan)])
-            val_to_move = ((points[-1]-points[0])**3)/6
-            bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
-            error = error+bord_control
-            
-            ### Controle Levy Area
-            LA_MMD = 0.5*(MMD[1]-MMD[1].T)
-            LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
-            LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
-            error = error + LA_control
-            return error+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
-          
-       A = torch.randn([self.chan,self.len_base], requires_grad=True)
-           
-       if opt == "AdamW":
-               optimizer = optim.AdamW([A], lr = lrs)
-       if opt == "Adam":
-               optimizer = optim.Adam([A], lr = lrs)
-       if opt == "LBFGS":
-               optimizer = optim.LBFGS([A], lr=lrs)
-    
-       sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 1000)
-           #loss = nn.MSELoss()
-           #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
-           #list_A = []
-       i = 0
-       loss_ref = np.inf
-       A_temp = np.zeros(shape = (1))
-    
-       par = 0.01
-   
-       while i<limits and loss_ref > eps :
-           print(f'Step {i}')
-           if opt != "LBFGS":
-             optimizer.zero_grad()
-             #MMD = model.forward(A)
+                 def closure():
+                     optimizer.zero_grad()
+                     #MMD = model.forward(A)
+                     loss_val = error_func(A.type(dtype),par).to(device)
+                     loss_val.backward()
+                     return loss_val
+                 optimizer.step(closure)
+                 loss_value = closure().clone().detach()
+                 sched.step(loss_value)
+                 for param_group in optimizer.param_groups:
+                     print(param_group['lr'])
 
-             loss_val = error_func(A.type(dtype),par).to(device)
-             loss_val.backward()
-             optimizer.step()
-             loss_value = loss_val.clone().detach()
-             sched.step(loss_val)
-             for param_group in optimizer.param_groups:
-                 print(param_group['lr'])
-           else:
-                def closure():
-                    optimizer.zero_grad()
-                    #MMD = model.forward(A)
-                    loss_val = error_func(A.type(dtype),par).to(device)
-                    loss_val.backward()
-                    return loss_val
-                optimizer.step(closure)
-                loss_value = closure().clone().detach()
-                sched.step(loss_value)
-                for param_group in optimizer.param_groups:
-                    print(param_group['lr'])
- 
-           if loss_value < loss_ref:
-                 A_temp = A.clone()
-                 loss_ref = loss_value
-           i +=1
-           print(loss_value)
-        
-       if A_temp.max() == 0:
-         A_temp = A
-       if i%10==0:
-        par*=2
-     
-       print("gradient descent stopped at step: "+str(i))
-       print("Loss min at the end: "+str(loss_ref))
-                   
-       return A_temp
+            if loss_value < loss_ref:
+                  A_temp = A.clone()
+                  loss_ref = loss_value
+            i +=1
+            print(loss_value)
+
+        if A_temp.max() == 0:
+          A_temp = A
+        if i%10==0:
+         par*=2
+
+        print("gradient descent stopped at step: "+str(i))
+        print("Loss min at the end: "+str(loss_ref))
+
+        return A_temp
        
 def leadlag(X):
     '''

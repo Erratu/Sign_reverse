@@ -1,0 +1,6 @@
+signatory
+numpy
+torch
+torch.nn
+skfda
+scipy
