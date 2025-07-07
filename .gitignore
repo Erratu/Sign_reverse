@@ -1,0 +1,29 @@
+# Environnement virtuel
+venv/
+.env/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyc
+
+# Fichiers de logs ou temporaires
+*.log
+*.tmp
+*.swp
+*.bak
+
+# Paramètres de VS Code
+.vscode/
+
+# Cache de test / outils
+.pytest_cache/
+.coverage
+.cache/
+htmlcov/
+
+# Fichiers de dépendances (si non utilisés)
+Pipfile.lock
+poetry.lock
