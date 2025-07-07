@@ -1,6 +1,12 @@
 # Environnement virtuel
 venv/
 .env/
+gan_env/
+
+# Dossiers non travaillés
+Chapter4/
+Hypergraphs tests/
+Introduction/
 
 # Fichiers compilés Python
 __pycache__/
