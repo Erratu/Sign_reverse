@@ -1,65 +1,58 @@
 import torch
 from torch import nn
-import numpy as np
 import torchvision.utils as vutils
 
 class Discriminator(nn.Module):
 
-    def __init__(self, classes, length):
+    def __init__(self):
 
-        super(Discriminator, self).__init__()
-        self.label_embedding = nn.Embedding(classes, classes)
+        super().__init__()
+        #self.label_embedding = nn.Embedding(classes, classes//2)
         self.model = nn.Sequential(
-            nn.Linear(classes + length, 256, False, True),
+            #nn.Linear(classes//2 + length, 128),
+            nn.Linear(2, 256),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(256, 128, True, True),
+            nn.Linear(256, 128),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(128, 64, True, True),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(64, 32, False, False),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(32, 1, False, False),
+            nn.Linear(64, 1),
             nn.Sigmoid(),
         )
 
-    def forward(self, x, labels):
-        x = torch.cat((x, self.label_embedding(labels)), -1)
+    def forward(self, x):
+        #x = torch.cat((x, self.label_embedding(labels)), -1)
         return self.model(x)
     
+
 class Generator(nn.Module):
 
-    def __init__(self, classes, length, input_dim):
+    def __init__(self):
 
-        super(Generator, self).__init__()
-        self.label_embedding = nn.Embedding(classes, classes)
+        super().__init__()
+        #self.label_embedding = nn.Embedding(classes, classes//2)
+        #self.T=T
+        #self.D=D
         self.model = nn.Sequential(
-            nn.Linear(input_dim + classes, 32),
-            nn.BatchNorm1d(32),
+            #nn.Linear(input_dim + classes//2, 64),
+            nn.Linear(2, 16),
             nn.ReLU(),
-            nn.Linear(32, 64),
-            nn.BatchNorm1d(64),
+            nn.Linear(16, 32),
             nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.Linear(256, classes + length),
+            nn.Linear(32, 2),
         )
 
-    def forward(self, x, labels, dim):
-        x = torch.cat((x, self.label_embedding(labels)), -1)
+    def forward(self, x):
+        #x = torch.cat((x, self.label_embedding(labels)), -1)
         out = self.model(x)
-        return out.view(-1, dim[0], dim[1])
+        return out#.view(-1, self.T, self.D) 
 
     
 class GAN():
-    def __init__(self, epochs, batch_size, num_classes, sign_shape, input_dim, loss_G, loss_D, lr, device="cpu"):
+    def __init__(self, epochs, batch_size, num_classes, sign_shape, input_dim, loss_function, lr, log_interval, device="cpu"):
 
         self.epochs = epochs
         self.batch_size = batch_size
@@ -67,71 +60,68 @@ class GAN():
         self.num_classes = num_classes
         self.input_dim = input_dim
         self.shape = sign_shape
-        self.loss_G = loss_G
-        self.loss_D = loss_D
+        self.loss = loss_function
         self.generated_data = []
-        self.length = self.shape[0]*self.shape[1]
+        self.lr = lr
+        self.log_interval = log_interval
 
-        self.generator = Generator(self.num_classes, self.length, self.input_dim).to(device)
-        self.discriminator = Discriminator(self.num_classes, self.length).to(device)
+        self.generator = Generator().to(device)
+        self.discriminator = Discriminator().to(device)
 
         self.optim_G = torch.optim.Adam(self.generator.parameters(), lr=lr)
         self.optim_D = torch.optim.Adam(self.discriminator.parameters(), lr=lr)
 
-    def train_step(self, train_data, classes):
-
-        train_set = [
-            (train_data[i], classes[i]) for i in range(len(classes))
-        ]
+    def train_step(self, train_data):
 
         train_loader = torch.utils.data.DataLoader(
-            train_set, batch_size=self.batch_size, shuffle=True
+            train_data, batch_size=self.batch_size, shuffle=True
         )
+
 
         self.generator.train()
         self.discriminator.train()
-        viz_z = torch.zeros((batch_size, self.input_dim), device=self.device)
-        viz_noise = torch.randn(batch_size, self.input_dim, device=self.device)
-        nrows = batch_size // 8
-        viz_label = torch.LongTensor(np.array([num for _ in range(nrows) for num in range(8)])).to(self.device)
-
         for epoch in range(self.epochs):
-            for batch_idx, (data, target) in enumerate(train_loader):
+            for n, (real_samples, _) in enumerate(train_loader):
 
-                data, target = data.to(self.device), target.to(self.device)
-                batch_size = data.size(0)
-                real_label = torch.full((batch_size, 1), 1., device=self.device)
-                fake_label = torch.full((batch_size, 1), 0., device=self.device)
+                # Data for training the discriminator
+                real_samples_labels = torch.ones((self.batch_size, 1))
+                latent_space_samples = torch.randn((self.batch_size, 2))
+                generated_samples = self.generator(latent_space_samples)
+                generated_samples_labels = torch.zeros((self.batch_size, 1))
+                all_samples = torch.cat((real_samples, generated_samples))
+                all_samples_labels = torch.cat(
+                    (real_samples_labels, generated_samples_labels)
+                )
 
-                # Train G
-                self.generator.zero_grad()
-                z_noise = torch.randn(batch_size, self.input_dim, device=self.device)
-                #x_fake_labels = torch.randint(0, self.classes, (batch_size,), device=self.device)
-                x_fake_labels = torch.randint(1, 2, (batch_size,), device=self.device)
-                x_fake = self.generator(z_noise, x_fake_labels)
-                y_fake_g = self.discriminator(x_fake, x_fake_labels)
-                g_loss = self.discriminator.loss(y_fake_g, real_label)
-                g_loss.backward()
-                self.optim_G.step()
-
-                # Train D
+                # Training the discriminator
                 self.discriminator.zero_grad()
-                y_real = self.discriminator(data, target)
-                d_real_loss = self.discriminator.loss(y_real, real_label)
-                y_fake_d = self.discriminator(x_fake.detach(), x_fake_labels)
-                d_fake_loss = self.discriminator.loss(y_fake_d, fake_label)
-                d_loss = (d_real_loss + d_fake_loss) / 2
-                d_loss.backward()
+                output_discriminator = self.discriminator(all_samples)
+                loss_discriminator = self.loss(
+                    output_discriminator, all_samples_labels)
+                loss_discriminator.backward()
                 self.optim_D.step()
 
-                if batch_idx % self.lr == 0 and batch_idx > 0:
-                    print('Epoch {} [{}/{}] loss_D: {:.4f} loss_G: {:.4f}'.format(
-                                epoch, batch_idx, len(train_loader),
-                                d_loss.mean().item(),
-                                g_loss.mean().item()))
+                # Data for training the generator
+                latent_space_samples = torch.randn((self.batch_size, 2))
 
-                    with torch.no_grad():
-                        viz_sample = self.generator(viz_noise, viz_label)
-                        self.generated_data.append(vutils.make_grid(viz_sample, normalize=True))
+                # Training the generator
+                self.generator.zero_grad()
+                generated_samples = self.generator(latent_space_samples)
+                output_discriminator_generated = self.discriminator(generated_samples)
+                loss_generator = self.loss(
+                    output_discriminator_generated, real_samples_labels
+                )
+                loss_generator.backward()
+                self.optim_G.step()
 
-        
+
+                # Show loss
+                if epoch % 10 == 0 and n == self.batch_size - 1:
+                    print(f"Epoch: {epoch} Loss D.: {loss_discriminator}")
+                    print(f"Epoch: {epoch} Loss G.: {loss_generator}")
+
+                for name, param in self.generator.named_parameters():
+                    if param.grad is not None:
+                        print(f"{name} grad mean: {param.grad.mean().item()}")
+
+        torch.save(self.generator.state_dict(), "./models_saved/generator_sin.pt")
