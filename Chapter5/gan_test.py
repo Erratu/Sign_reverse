@@ -1,9 +1,8 @@
 import torch
 from torch import nn
-from gan import GAN, Generator
 import math
-import matplotlib.pyplot as plt
 import iisignature
+import numpy as np
 
 # Define variables
 CUDA = False
@@ -16,9 +15,68 @@ num_classes = 6 # type des données générées
 channels = 2
 gen_size = int((channels*(channels**3 -1))/(channels-1))
 input_dim = 8
-#log_interval = 2
 sig_level = 3
 num_signs = 512
+size_ts= 100
+sigma = 0.1
+
+def create_polynomial(times):
+    f = lambda t: t**4 - t**3 - 5*t**2 - 8*t + 4 + sigma*np.random.normal(size = size_ts)
+    g = lambda t: t**4 - t**3 - 5*t**2 - 8*t + 4
+    idx_ts = np.argsort(times)
+    traj = f(times[idx_ts])
+    return (times[idx_ts],traj)
+
+def create_cosine(times):
+    # class = 1
+    f = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
+    g = lambda t: np.cos(t)
+    idx_ts = np.argsort(times)
+    traj = f(times[idx_ts])
+    return (times[idx_ts],traj)
+
+def create_exp(times):
+    # class = 2
+    f = lambda t: np.exp(-(t-3)**2)+sigma*np.random.normal(size = size_ts)
+    g = lambda t: np.exp(-(t-3)**2)
+    idx_ts = np.argsort(times)
+    traj = f(times[idx_ts])
+    return (times[idx_ts],traj)
+
+def create_noisy_circle(times):
+    # class = 3
+    times = np.linspace(0,2*np.pi,num = size_ts)
+    f1 = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
+    f2 = lambda t: np.sin(t)+sigma*np.random.normal(size = size_ts)
+    traj = np.array([f1(times),f2(times)])
+    idx_ts = np.argsort(times)
+    traj = traj[:,idx_ts]
+    times = times[idx_ts]
+    return (times,traj)
+
+def create_brown_1D(times):
+    # class = 4
+    traj = brown(size = size_ts,sig = 1)
+    times = np.linspace(0, 1, num = size_ts)
+    return (times,traj)
+
+def create_brown_multiD(times):
+    # class = 5
+    dim = 5
+    traj = brown(size = (size_ts,dim),sig = 1).T
+    times = np.linspace(0, 1, num = traj.shape[1])
+    idx_ts = np.argsort(times)
+    times = times[idx_ts]
+    return (times,traj)
+
+classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD]
+
+def create_training_data(num_ex_classes):
+    times = np.linspace(0,T,num = size_ts)
+    for class_num, num_ex in enumerate(num_ex_classes):
+        data = []
+        for i in range(num_ex):
+            data.append(classes[class_num](times))
 
 def create_data():
     torch.manual_seed(111)
