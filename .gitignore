@@ -8,6 +8,9 @@ Chapter4/
 Hypergraphs tests/
 Introduction/
 
+# Résultats des tests
+graphes_résultat/
+
 # Fichiers compilés Python
 __pycache__/
 *.py[cod]
