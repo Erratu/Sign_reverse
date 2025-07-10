@@ -1,0 +1,72 @@
+num_epochs:100, num_exs:200 : 
+Loss D.: 12.717371081709862 Loss G.: 0.8319988277554512 
+num_epochs:200, num_exs:200 : 
+Loss D.: 1.5303377917408942 Loss G.: 1.3747755044698715 
+num_epochs:300, num_exs:200 : 
+Loss D.: 2.0195363257825374 Loss G.: 1.925750058889389 
+num_epochs:400, num_exs:200 : 
+Loss D.: 3.9091402646899223 Loss G.: 2.0583270835876464 
+num_epochs:500, num_exs:200 : 
+Loss D.: 4.461842150688171 Loss G.: 3.2526930382847787 
+num_epochs:600, num_exs:200 : 
+Loss D.: 2.487354878783226 Loss G.: 2.5328611946105957 
+num_epochs:100, num_exs:300 : 
+Loss D.: 6.631958244740963 Loss G.: 1.0748986703157426 
+num_epochs:200, num_exs:300 : 
+Loss D.: 2.092138009518385 Loss G.: 1.6683308815956115 
+num_epochs:300, num_exs:300 : 
+Loss D.: 3.16762564022094 Loss G.: 2.1126735949516298 
+num_epochs:400, num_exs:300 : 
+Loss D.: 3.593441258072853 Loss G.: 2.2404679852724074 
+num_epochs:500, num_exs:300 : 
+Loss D.: 3.450709725096822 Loss G.: 2.64310506105423 
+num_epochs:600, num_exs:300 : 
+Loss D.: 3.0036219412833454 Loss G.: 2.839821760058403 
+num_epochs:100, num_exs:400 : 
+Loss D.: 5.099882065057755 Loss G.: 1.0764869531989099 
+num_epochs:200, num_exs:400 : 
+Loss D.: 4.2001007771492 Loss G.: 2.2876544213294983 
+num_epochs:300, num_exs:400 : 
+Loss D.: 2.2422511970996855 Loss G.: 2.022338110208511 
+num_epochs:400, num_exs:400 : 
+Loss D.: 1.1561008608341217 Loss G.: 3.0734970033168794 
+num_epochs:500, num_exs:400 : 
+Loss D.: 7.032738843560219 Loss G.: 4.595122855901718 
+num_epochs:600, num_exs:400 : 
+Loss D.: 3.9920521436631677 Loss G.: 3.5936236691474917 
+num_epochs:100, num_exs:500 : 
+Loss D.: 6.189625170826912 Loss G.: 1.3304715687036515 
+num_epochs:200, num_exs:500 : 
+Loss D.: 2.54740115404129 Loss G.: 1.7652467900514603 
+num_epochs:300, num_exs:500 : 
+Loss D.: 1.9809264008700849 Loss G.: 2.4575788342952727 
+num_epochs:400, num_exs:500 : 
+Loss D.: 4.259064424037933 Loss G.: 3.193109086751938 
+num_epochs:500, num_exs:500 : 
+Loss D.: 8.10493025481701 Loss G.: 5.34932814180851 
+num_epochs:600, num_exs:500 : 
+Loss D.: 11.020987994670868 Loss G.: 11.63235132932663 
+num_epochs:100, num_exs:600 : 
+Loss D.: 6.087296346873045 Loss G.: 1.185460428595543 
+num_epochs:200, num_exs:600 : 
+Loss D.: 4.114374234676361 Loss G.: 2.489533326625824 
+num_epochs:300, num_exs:600 : 
+Loss D.: 3.7614104670286177 Loss G.: 2.4650253680348397 
+num_epochs:400, num_exs:600 : 
+Loss D.: 3.3293574844300746 Loss G.: 3.4920288836956024 
+num_epochs:500, num_exs:600 : 
+Loss D.: 2.583938031196594 Loss G.: 3.0968628334999084 
+num_epochs:600, num_exs:600 : 
+Loss D.: 2.1758393892645835 Loss G.: 3.990783681869507 
+num_epochs:100, num_exs:700 : 
+Loss D.: 1.974973212480545 Loss G.: 1.4588478156924247 
+num_epochs:200, num_exs:700 : 
+Loss D.: 1.9990606762841343 Loss G.: 2.441962782740593 
+num_epochs:300, num_exs:700 : 
+Loss D.: 1.6177219175547362 Loss G.: 2.8075812423229216 
+num_epochs:400, num_exs:700 : 
+Loss D.: 3.957499661631882 Loss G.: 3.8282733857631683 
+num_epochs:500, num_exs:700 : 
+Loss D.: 11.151800348460675 Loss G.: 9.22946595311165 
+num_epochs:600, num_exs:700 : 
+Loss D.: 3.0900000935047864 Loss G.: 3.5357590353488924 

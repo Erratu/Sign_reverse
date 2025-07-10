@@ -2,6 +2,7 @@
 venv/
 .env/
 gan_env/
+env_signatory/
 
 # Dossiers non travaillés
 Chapter4/
@@ -10,6 +11,8 @@ Introduction/
 
 # Résultats des tests
 graphes_résultat/
+ep_ex_tests/
+results/
 
 # Fichiers compilés Python
 __pycache__/
