@@ -1,0 +1,16 @@
+num_epochs:100, num_exs:200 : 
+Loss D.: 12.717371081709862 Loss G.: 0.8319988277554512 
+num_epochs:200, num_exs:200 : 
+Loss D.: 1.5303377917408942 Loss G.: 1.3747755044698715 
+num_epochs:100, num_exs:300 : 
+Loss D.: 6.631958244740963 Loss G.: 1.0748986703157426 
+num_epochs:200, num_exs:300 : 
+Loss D.: 2.092138009518385 Loss G.: 1.6683308815956115 
+num_epochs:100, num_exs:400 : 
+Loss D.: 5.099882065057755 Loss G.: 1.0764869531989099 
+num_epochs:200, num_exs:500 : 
+Loss D.: 2.54740115404129 Loss G.: 1.7652467900514603 
+num_epochs:100, num_exs:600 : 
+Loss D.: 6.087296346873045 Loss G.: 1.185460428595543 
+num_epochs:100, num_exs:700 : 
+Loss D.: 1.974973212480545 Loss G.: 1.4588478156924247 

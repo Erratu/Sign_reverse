@@ -3,25 +3,14 @@ from torch import nn
 import math
 import iisignature
 import numpy as np
-from gan import GAN
+from random import random, randint
 
-# Define variables
-CUDA = False
-batch_size = 32
-lr_G = 0.001
-lr_D = 0.0002
-num_epochs = 400
-loss_function = nn.BCELoss()
-num_classes = 6 # type des données générées
-channels = [3,3,3,4,3,8]
-gen_size = max([int((channel*(channel**3 -1))/(channel-1)) for channel in channels])
-input_dim = 8
 sig_level = 3
 num_signs = 512
 size_ts= 100
-sigma = 0.1
 T = 5
 time_add = True
+
 
 def brown(size,sig=1):
     jump = np.random.normal(loc = 0, scale = sig, size = size)
@@ -49,33 +38,53 @@ def create_TD(multichan, times, traj):
     return TS
 
 def create_polynomial(times):
-    f = lambda t: t**4 - t**3 - 5*t**2 - 8*t + 4 + sigma*np.random.normal(size = size_ts)
-    g = lambda t: t**4 - t**3 - 5*t**2 - 8*t + 4
-    traj = f(times)
+    coef_range= (-5,5)
+    mult = random()
+    degree = 4
+    noise_std = random()
+
+    coefs = np.random.uniform(*coef_range, size=(degree + 1,))
+    traj = sum(coefs[i] * times ** (degree - i) for i in range(degree + 1)) + mult*np.random.normal(0, noise_std, size = size_ts)
     TS = create_TD(False, times, traj)
     return TS
 
 def create_cosine(times):
+    mult = random()
+    coeff = randint(1,5)
+    noise_std = random()
+
     # class = 1
-    f = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
-    g = lambda t: np.cos(t)
+    f = lambda t: coeff*np.cos(t)+mult*np.random.normal(0, noise_std, size = size_ts)
     traj = f(times)
     TS = create_TD(False, times, traj)
     return TS
 
 def create_exp(times):
     # class = 2
-    f = lambda t: np.exp(-(t-3)**2)+sigma*np.random.normal(size = size_ts)
-    g = lambda t: np.exp(-(t-3)**2)
+    mult = random()
+    noise_std = random()
+    amplitude_range=(0.5, 2.0)
+    mu_range=(-1, 1)
+    sigma_range=(0.1, 1.0)
+    a = np.random.uniform(*amplitude_range) 
+    mu = np.random.uniform(*mu_range)       
+    sigma = np.random.uniform(*sigma_range)
+
+    f = lambda t: a * np.exp(-((t - mu) ** 2) / (2 * sigma ** 2)) + mult*np.random.normal(0, noise_std, size = size_ts)
     traj = f(times)
     TS = create_TD(False, times, traj)
     return TS
 
 def create_noisy_circle(times):
     # class = 3
+    mult = random()
+    noise_std = random()
+    radius_range=(0.8, 1.2)
+    r = np.random.uniform(*radius_range)
+
     times = np.linspace(0,2*np.pi,num = size_ts)
-    f1 = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
-    f2 = lambda t: np.sin(t)+sigma*np.random.normal(size = size_ts)
+    f1 = lambda t: r*np.cos(t)+mult*np.random.normal(0, noise_std, size = size_ts)
+    f2 = lambda t: r*np.sin(t)+mult*np.random.normal(0, noise_std, size = size_ts)
     traj = np.array([f1(times),f2(times)])
     idx_ts = np.argsort(times)
     traj = traj[:,idx_ts]
@@ -101,15 +110,15 @@ def create_brown_multiD(times):
 
 classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD]
 
-def create_training_data(num_ex_classes):
+def create_training_data(num_ex_classes, gen_size):
     times = np.linspace(0,T,num = size_ts)
     data = []
     for class_num, num_ex in enumerate(num_ex_classes):
         for _ in range(num_ex):
             TS = classes[class_num](times)
             signature = torch.from_numpy(iisignature.sig(TS, sig_level)).float()
-            if signature.shape[0] != gen_size:
-                signature = nn.functional.pad(signature, (0, gen_size - signature.shape[0]))
+            if signature.shape[0] != max(gen_size):
+                signature = nn.functional.pad(signature, (0, max(gen_size) - signature.shape[0]))
             data.append((signature, class_num))
     return data
 
@@ -132,58 +141,3 @@ def create_data():
         (data[i], train_labels[i]) for i in range(num_signs)
     ]
     return train_set
-
-#gan = GAN(num_epochs, batch_size, num_classes, gen_size, input_dim, loss_function, lr_G, lr_D)
-#gan.train_step(train_set)
-
-#G2 = Generator()
-#G2.load_state_dict(torch.load("./models_saved/generator_sin.pt"))
-
-def grid_search(train_set):
-    # Learning rates
-    lrG_values = [1e-4, 2e-4, 5e-4, 1e-3]
-    lrD_values = [1e-4, 2e-4, 5e-4, 1e-3]
-    # Betas pour Adam
-    betas_values = [(0.5, 0.999), (0.4, 0.9), (0.0, 0.9)]
-    # Latent space (z) dimension à tester en dernier, d'abord 16 puis 32 puis 64 puis 8
-    latent_dim_values = [8, 16, 32, 64]
-    # Optionnel : batch size
-    batch_size_values = [16, 32, 64, 128]
-    size = 16
-    for dim in latent_dim_values:
-        for beta in betas_values:
-            for lrG in lrG_values:
-                for lrD in lrD_values:
-                    gan = GAN(200, size, num_classes, gen_size, dim, loss_function, lrG, lrD, beta)
-                    gan.train_step(train_set)
-
-def grid_search2(train_set):
-    # Learning rates
-    lrG_values = [5e-4, 1e-3]
-    lrD_values = [2e-4, 1e-3]
-    latent_dim_values = [8, 16]
-    batch_size_values = [32, 64, 128]
-    for dim in latent_dim_values:
-        for size in batch_size_values:
-            for lrG in lrG_values:
-                for lrD in lrD_values:
-                    gan = GAN(400, size, num_classes, gen_size, dim, loss_function, lrG, lrD)
-                    gan.train_step(train_set)
-
-def grid_search_hyperhyper():
-    for num_ex in [200,300,400,500,600,700]:
-        train_data = create_training_data([num_ex for _ in range(num_classes)])
-        for num_e in [100,200,300,400,500,600]:
-            gan = GAN(num_e, batch_size, num_classes, gen_size, input_dim, loss_function, lr_G, lr_D)
-            gan.train_step(train_data)
-
-if __name__ == "__main__":
-    grid_search_hyperhyper()
-    #train_data = create_training_data([500 for _ in range(num_classes)])
-    #gan = GAN(num_epochs, batch_size, num_classes, gen_size, input_dim, loss_function, lr_G, lr_D)
-    #gan.train_step(train_data)
-
-
-
-
-

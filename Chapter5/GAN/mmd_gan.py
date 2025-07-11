@@ -29,19 +29,20 @@ class Generator(nn.Module):
         return out 
 
     
-class GAN():
-    def __init__(self, epochs, batch_size, num_classes, sign_dim, class_sizes, input_dim, loss_function, lr_G, betas=(0.5, 0.999), device="cpu"):
+class MMDGAN():
+    def __init__(self, epochs, batch_size, num_classes, class_sizes, input_dim, loss_function, lr_G, sigma=1.0, betas=(0.5, 0.999), device="cpu"):
 
         self.epochs = epochs
         self.batch_size = batch_size
         self.device = device
         self.num_classes = num_classes
         self.input_dim = input_dim
-        self.sign_dim = sign_dim
+        self.sign_dim = max(class_sizes)
         self.loss = loss_function
         self.lr_G = lr_G
         self.betas = betas
         self.class_sizes = class_sizes
+        self.sigma=sigma
 
         self.generator = Generator(self.input_dim,self.sign_dim, self.num_classes).to(device)
 
@@ -76,16 +77,23 @@ class GAN():
                     real_1c = real_samples[idx_class,:class_size]
 
                     if class_size > 100:
-                        pca_full = PCA(n_components=class_size)
-                        pca_full.fit(real_1c)
+                        real_np = real_1c.detach().cpu().numpy()
+                        generated_np = generated_1c.detach().cpu().numpy()
+
+                        pca_full = PCA(n_components=min(idx_class.shape[0], class_size))
+                        pca_full.fit(real_np)
                         cumulative_variance = np.cumsum(pca_full.explained_variance_ratio_)
                         target_dim = np.searchsorted(cumulative_variance, 0.95) + 1
-                        print(f"Dimension retenue : {target_dim}")
+                        #print(f"Dimension retenue : {target_dim}")
                         pca = PCA(n_components=target_dim)
-                        real_1c = pca.fit_transform(real_1c)
-                        generated_1c = pca.fit_transform(generated_1c)
+                        real_np = pca.fit_transform(real_np)
+                        generated_np = pca.fit_transform(generated_np)
 
-                    list_mmd.append(compute_mmd(generated_1c, real_1c))
+                        real_1c = torch.from_numpy(real_np).to(real_1c.device)  
+                        generated_1c = torch.from_numpy(generated_np).to(generated_1c.device)  
+
+
+                    list_mmd.append(self.compute_mmd(generated_1c, real_1c, self.sigma))
 
                 loss_generator = torch.stack(list_mmd).mean()
                 loss_generator.backward()
@@ -102,22 +110,23 @@ class GAN():
             losses_G.append(loss_generator.item())
 
         plt.plot(losses_G, "b.")
-        plt.savefig(f"./ep_ex_tests/ep_{self.epochs}_ex_{len(train_data)//self.num_classes}.png")
-        with open(f"./resultats_num_ep_ex.txt","a") as f:
-            f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss G.: {np.mean(losses_G[self.epochs-100:])} \n")
+        plt.savefig(f"./models_saved/results_mmd_sign_gen.png")
+        #with open(f"./resultats_num_ep_ex.txt","a") as f:
+        #    f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss G.: {np.mean(losses_G[self.epochs-100:])} \n")
+        print(f"Loss G.: {np.mean(losses_G[self.epochs-100:])}")
         plt.show()
-        torch.save(self.generator.state_dict(), "./models_saved/generator_sign_sin.pt")
+        torch.save(self.generator.state_dict(), "./models_saved/generator_sign_mmd.pt")
 
-def gaussian_kernel(x, y, sigma=1.0):
-    # x, y: (batch_size, dim)
-    x_expanded = x.unsqueeze(1)  # (batch_size, 1, dim)
-    y_expanded = y.unsqueeze(0)  # (1, batch_size, dim)
-    dist = ((x_expanded - y_expanded)**2).sum(2)
-    return torch.exp(-dist / (2 * sigma**2))
+    def gaussian_kernel(self, x, y, sigma):
+        # x, y: (batch_size, dim)
+        x_expanded = x.unsqueeze(1)  # (batch_size, 1, dim)
+        y_expanded = y.unsqueeze(0)  # (1, batch_size, dim)
+        dist = ((x_expanded - y_expanded)**2).sum(2)
+        return torch.exp(-dist / (2 * sigma**2))
 
-def compute_mmd(x, y, sigma=1.0):
-    Kxx = gaussian_kernel(x, x, sigma)
-    Kyy = gaussian_kernel(y, y, sigma)
-    Kxy = gaussian_kernel(x, y, sigma)
-    mmd = Kxx.mean() + Kyy.mean() - 2 * Kxy.mean()
-    return mmd
+    def compute_mmd(self, x, y, sigma):
+        Kxx = self.gaussian_kernel(x, x, sigma)
+        Kyy = self.gaussian_kernel(y, y, sigma)
+        Kxy = self.gaussian_kernel(x, y, sigma)
+        mmd = Kxx.mean() + Kyy.mean() - 2 * Kxy.mean()
+        return mmd

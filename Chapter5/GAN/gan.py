@@ -62,7 +62,7 @@ class GAN():
         self.device = device
         self.num_classes = num_classes
         self.input_dim = input_dim
-        self.sign_dim = sign_dim
+        self.sign_dim = max(sign_dim)
         self.loss = loss_function
         self.lr_G = lr_G
         self.lr_D = lr_D
@@ -138,10 +138,11 @@ class GAN():
 
         plt.plot(losses_D, "r.")
         plt.plot(losses_G, "b.")
-        plt.savefig(f"./ep_ex_tests/ep_{self.epochs}_ex_{len(train_data)//self.num_classes}.png")
-        with open(f"./resultats_num_ep_ex.txt","a") as f:
-            f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])} \n")
+        plt.savefig(f"./models_saved/results_sign_gen.png")
+        #with open(f"./resultats_num_ep_ex.txt","a") as f:
+        #    f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])} \n")
+        print(f"Loss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])}")
         plt.show()
-        torch.save(self.generator.state_dict(), "./models_saved/generator_sign_sin.pt")
-        torch.save(self.discriminator.state_dict(), "./models_saved/discriminator_sign_sin.pt")
+        torch.save(self.generator.state_dict(), "./models_saved/generator_sign_gen.pt")
+        torch.save(self.discriminator.state_dict(), "./models_saved/discriminator_sign_gen.pt")
 
