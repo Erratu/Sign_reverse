@@ -110,7 +110,7 @@ def create_brown_multiD(times):
 
 classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD]
 
-def create_training_data(num_ex_classes, gen_size):
+def create_training_data_cgan(num_ex_classes, gen_size):
     times = np.linspace(0,T,num = size_ts)
     data = []
     for class_num, num_ex in enumerate(num_ex_classes):
@@ -120,6 +120,15 @@ def create_training_data(num_ex_classes, gen_size):
             if signature.shape[0] != max(gen_size):
                 signature = nn.functional.pad(signature, (0, max(gen_size) - signature.shape[0]))
             data.append((signature, class_num))
+    return data
+
+def create_training_data_gan(nb_ch, distr_num):
+    times = np.linspace(0,T,num = size_ts)
+    data = []
+    for _ in range(nb_ch):
+        TS = classes[distr_num](times)
+        signature = torch.from_numpy(iisignature.sig(TS, sig_level)).float()
+        data.append(signature)
     return data
 
 def create_data():
