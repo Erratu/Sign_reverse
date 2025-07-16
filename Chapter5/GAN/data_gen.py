@@ -150,3 +150,10 @@ def create_data():
         (data[i], train_labels[i]) for i in range(num_signs)
     ]
     return train_set
+
+if __name__ == "__main__":
+     times = np.linspace(0,T,num = size_ts)
+     for num in range(6):
+        TS = classes[num](times)
+        signature = torch.from_numpy(iisignature.sig(TS, sig_level)).float()
+        print(signature.shape)
