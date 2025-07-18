@@ -1,4 +1,3 @@
-LAMBDA = 10
 CRITIC_ITERS = 2  # How many critic iterations per generator iteration
 
 import torch
@@ -6,6 +5,7 @@ from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.autograd as autograd
+
 class Discriminator(nn.Module):
 
     def __init__(self, sign_dim):
@@ -64,7 +64,7 @@ def standardize_per_dimension(tensor):
     return standardized
         
 class GAN():
-    def __init__(self, epochs, batch_size, sign_dim, input_dim, loss_function, lr_G=1e-4, lr_D=1e-4, betas=(0.0, 0.9), device="cpu"):
+    def __init__(self, epochs, batch_size, sign_dim, input_dim, loss_function, lamb, lr_G=1e-4, lr_D=1e-4, betas=(0.0, 0.9), device="cpu"):
 
         self.epochs = epochs
         self.batch_size = batch_size
@@ -75,6 +75,7 @@ class GAN():
         self.lr_G = lr_G
         self.lr_D = lr_D
         self.betas = betas
+        self.lamb = lamb
 
         self.generator = Generator(self.input_dim,self.sign_dim).to(device)
         self.discriminator = Discriminator(self.sign_dim).to(device)
@@ -116,7 +117,7 @@ class GAN():
                     output_real = self.discriminator(real_samples)
                     output_false = self.discriminator(generated_samples.detach())
 
-                    gp = self.gp(real_samples, generated_samples, LAMBDA)
+                    gp = self.gp(real_samples, generated_samples, self.lamb)
 
                     # 4. Compute total D loss (WGAN-GP)
                     d_loss = -output_real.mean() + output_false.mean() + gp
@@ -145,6 +146,8 @@ class GAN():
         
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
+                with open("hyperparams/lambda_search.txt", 'a') as f:
+                    f.write(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}\n")
                 
             losses_D.append(d_loss.item())
             losses_G.append(g_loss.item())
@@ -190,3 +193,4 @@ class GAN():
         # Pénalité = (||grad||_2 - 1)^2
         penalty = ((gradient_norm - 1) ** 2).mean() * lambda_gp
         return penalty
+    
