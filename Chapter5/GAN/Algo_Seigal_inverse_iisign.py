@@ -1,20 +1,21 @@
 #import pywavelets
 
+import iisignature
+import numpy as np
 import torch
 from torch import optim
 import torch.nn as nn
-from signatory import Signature, signature_channels, signature_combine, all_words
-import numpy as np
 #from torch.func import grad
 from numpy import polynomial
 from skfda.representation import basis
 import skfda
+import itertools as it
 
 
 
 class SeigalAlgo:
     
-    def __init__(self, TS, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, sig_TS = None, decal_length = 1):
+    def __init__(self, TS, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, decal_length = 1, sig_TS=None):
         """initialize the inversion algorithm
 
         Args:
@@ -142,15 +143,12 @@ class SeigalAlgo:
        
        
         ########## On calcule les différentes signatures
-        signature_TS = Signature(depth = self.depth,scalar_term= True).to(device)   
-        signature_base = Signature(depth = self.depth).to(device)
-
         ### Sig_TS est une collection de tenseurs
-        if self.sig_TS == None :
-            sig_TS = signature_TS(self.TS.to(device))   
+        if sig_TS == None :
+            signature_TS = torch.from_numpy(iisignature.sig(self.TS.to(device), self.depth)).float().to(device)
         else:
-            sig_TS = self.sig_TS.detach()
-        sig_base = signature_base(base) 
+            sig_TS = self.sig_TS
+        sig_base = torch.from_numpy(iisignature.sig(base, self.depth)).float().to(device)
 
         def unflatten_sig2(sig):
             sig_unflat = [np.empty(1) for i in range(self.depth)]
@@ -175,7 +173,7 @@ class SeigalAlgo:
            #x = np.asarray(x)
            #m = np.asarray(m)
            if mode % 1 != 0:
-               raise ValueError('`mode` must be an integer')
+               raise ValueError('`mode` must be an interger')
            if x.ndim < mode:
                raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
            if m.ndim != 2:
@@ -196,8 +194,18 @@ class SeigalAlgo:
              checkpoints = RS[[0,-1]]
              return checkpoints.to(device)
 
+        def all_words(channels: int, depth: int):
+
+            def generator():
+                r = range(channels)
+                for depth_index in range(1, depth + 1):
+                    ranges = (r,) * depth_index
+                    for elem in it.product(*ranges):
+                        yield elem
+            return list(generator())
+
         def flatten_MMD(MMD):
-            chan_sig = signature_channels(self.chan, self.depth,scalar_term=True)
+            chan_sig = iisignature.siglength(self.chan, self.depth)
             sig_flat = torch.ones(chan_sig)
             words = all_words(self.chan, self.depth)
             for k in range(chan_sig-1):
@@ -206,7 +214,7 @@ class SeigalAlgo:
             return sig_flat
 
 
-        def error_func(A):
+        def error_func(A,par):
 
              #B = torch.cat((torch.tensor(self.T_basis).float().to(device),A),dim = 0).flip([-2]).float()
 
@@ -249,7 +257,7 @@ class SeigalAlgo:
         if opt == "LBFGS":
                 optimizer = optim.LBFGS([A], lr=lrs)
 
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 400)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 1000)
             #loss = nn.MSELoss()
             #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
             #list_A = []
@@ -259,23 +267,23 @@ class SeigalAlgo:
 
         par = 0.01
 
-        while i<limits and loss_ref > eps:
+        while i<limits and loss_ref > eps :
             print(f'Step {i}')
             if opt != "LBFGS":
               optimizer.zero_grad()
               #MMD = model.forward(A)   
-              loss_val = error_func(A.type(dtype)).to(device)
+              loss_val = error_func(A.type(dtype),par).to(device)
               loss_val.backward()
               optimizer.step()
               loss_value = loss_val.clone().detach()
-              sched.step(loss_value)
+              sched.step(loss_val)
               for param_group in optimizer.param_groups:
                   print(param_group['lr'])
             else:
                  def closure():
                      optimizer.zero_grad()
                      #MMD = model.forward(A)
-                     loss_val = error_func(A.type(dtype)).to(device)
+                     loss_val = error_func(A.type(dtype),par).to(device)
                      loss_val.backward()
                      return loss_val
                  optimizer.step(closure)

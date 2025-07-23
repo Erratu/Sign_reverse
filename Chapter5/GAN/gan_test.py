@@ -1,7 +1,9 @@
+import torch
 from torch import nn
 #from mmd_gan import MMDGAN
 from data_gen import create_training_data_gan
 from wgan_gp import GAN as WGAN
+import iisignature
 
 # Define variables
 CUDA = False
@@ -12,11 +14,11 @@ num_epochs = 300
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32
 nb_ch = 2000
-channels = [3,3,3,4,3,7]
+channels = [3,3,3,4,3,7,3]
 
-distr_num = 0
+distr_num = -1
 channel = channels[distr_num]
-sign_dim = int((channel*(channel**3 -1))/(channel-1))
+sign_dim = iisignature.siglength(channel, 3)+1
 
 #num_classes = 6 # type des données générées
 #num_ex = 400
@@ -29,8 +31,18 @@ sign_dim = int((channel*(channel**3 -1))/(channel-1))
 
 if __name__ == "__main__":
     train_data = create_training_data_gan(nb_ch, distr_num)
+    data = torch.stack(train_data)
+    mean = data.mean(dim=0, keepdim=True) 
+    std = data.std(dim=0, keepdim=True)
+
+    torch.save({'mean': mean, 'std': std}, "mean_std_gan.pt")
+        
     wgan = WGAN(num_epochs, batch_size, sign_dim, input_dim, loss_function, 10, lr_G, lr_D)
-    wgan.train_step(train_data,"poly_G_model", "poly_D_model")
+    wgan.train_step(train_data, mean, std, "poly_G_model", "poly_D_model")
+    gen = wgan.generator
+    latent_space_samples = torch.randn((batch_size, input_dim))
+    gen_data = gen(latent_space_samples) * std + mean
+    print(data, gen_data)
 
 
 

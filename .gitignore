@@ -2,7 +2,7 @@
 venv/
 .env/
 gan_env/
-env_signatory/
+inv_env/
 
 # Dossiers non travaillés
 Chapter4/

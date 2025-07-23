@@ -1,30 +1,66 @@
 import numpy as np
 from Algo_Seigal_inverse_path2 import SeigalAlgo
 import matplotlib.pyplot as plt
+import torch
+from torch import nn
+from signatory import Signature
 
-from data_gen import create_polynomial
+from wgan_gp import Generator
+from data_gen import create_cosine_without_rand, create_TD
 
-def test_inverse_GAN(TS, traj, sign, times, size_ts, multichan, time_add):
-    """montre 
+batch_size = 32
+input_dim = 32
+nb_ch = 2000
+device = "cpu"
+size_ts= 600
+
+def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
+    """montre le graphe de la TS associée à la signature créée par le GAN.
 
     Args:
-        TS (_type_): _description_
-        traj (_type_): _description_
-        times (_type_): _description_
-        size_ts (_type_): _description_
-        multichan (_type_): _description_
-        time_add (_type_): _description_
+        nb_ch (int): the number of data to use to train the Generator
+        size_ts (int): the size of the TS to recompose
+        multichan (bool): If the test data are multidimensional or not
+        time_add (bool): If the data are time-augmented. Defaults to true.
     """
-    chan = TS.shape[1]
+
+    signature_TS = Signature(depth = 3,scalar_term= True).to(device)
+    data = []
+    for _ in range(nb_ch):
+        times,traj = create_cosine_without_rand()
+        L, TS = create_TD(multichan, times, traj, time_add = True)
+        signature = signature_TS(torch.from_numpy(TS)[None].to(device))
+        data.append(signature)
+    
+    sign_dim = data[0].shape[1]
+
+    data_stats = torch.load("mean_std_gan.pt")
+    mean = data_stats['mean']
+    std = data_stats['std']
+
+    generator = Generator(input_dim, sign_dim)
+    generator.load_state_dict(torch.load('models_saved/poly_G_model.pt'), strict=False)
+    latent_space_samples = torch.randn((batch_size, input_dim))
+    sign_norm = generator(latent_space_samples) 
+    sign = torch.where(std != 0, sign_norm * std + mean, sign_norm + mean)
+
+    print(signature, sign)
+
     len_base = size_ts-1
-    SA = SeigalAlgo(TS, len_base, chan, real_chan = 0, depth = 3, n_recons = 2, size_base = len_base+1,time_chan = True)
+    depth = 3
+    n_recons = 2
+    real_chan = 0
+    size_base = len_base+1
+
+    chan = TS.shape[1]
+    SA = SeigalAlgo(TS, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].unsqueeze(0))
 
     #Available base: "PwLinear", "BSpline", "Fourier"
     base_name = "PwLinear"
     base = SA.define_base(base_name).flip([-2,-1])
 
     #Number of iteration for optimisation
-    limits = 20000
+    limits = 5000
     #Learning rate (there is a patience schedule)
     lrs = 1e-2
 
@@ -33,7 +69,6 @@ def test_inverse_GAN(TS, traj, sign, times, size_ts, multichan, time_add):
     # params are [lambda_length, lambda_frontier, lambda_levy, lambda_ridge]
     # [1,5,0,1] , [5,1,0,1] or the same with lambda_ridge = 0 worked well
     params = [1,5,0,0]
-    pack = "torch"
 
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
@@ -86,3 +121,6 @@ def test_inverse_GAN(TS, traj, sign, times, size_ts, multichan, time_add):
         plt.plot(np.flip(recomposed_signal[0,:]))
         plt.legend(['truth_times','reconstruction_times'])
         plt.show()
+
+if __name__=="__main__":
+    test_inverse_GAN(nb_ch, size_ts, False, time_add=True)

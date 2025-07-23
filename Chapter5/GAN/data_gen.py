@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import math
-import iisignature
+#import iisignature
 import numpy as np
 from random import random, randint
 import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ def create_TD(multichan, times, traj, time_add = True):
         else:
             TS = torch.cat((torch.tensor(L)[None],torch.tensor(traj-traj[:,0,None])),axis=0).numpy().T
         #print("MD:",TS.shape)
-    return TS
+    return L, TS
 
 def create_polynomial():
     coef_range= (-5,5)
@@ -61,6 +61,16 @@ def create_cosine():
     f = lambda t: coeff*np.cos(random()*t)+mult*np.random.normal(0, noise_std, size = size_ts)
     traj = f(times)
     
+    return times,traj
+
+def create_cosine_without_rand():
+    mult = random()*0.5
+    noise_std = random()*0.5
+    times = np.random.uniform(0,10, (size_ts,))
+    times = np.sort(times)
+    # class = 1
+    f = lambda t: np.cos(t)+mult*np.random.normal(0, noise_std, size = size_ts)
+    traj = f(times)
     return times,traj
 
 def create_exp():
@@ -109,7 +119,7 @@ def create_brown_multiD():
     times = np.sort(times)
     return times,traj
 
-classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD]
+classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD,create_cosine_without_rand]
 
 def create_training_data_cgan(num_ex_classes, gen_size):
     data = []
@@ -126,10 +136,13 @@ def create_training_data_cgan(num_ex_classes, gen_size):
 def create_training_data_gan(nb_ch, distr_num):
     data = []
     for _ in range(nb_ch):
-        times,TS = classes[distr_num]()
-        path = np.column_stack((times, TS))
-        signature = torch.from_numpy(iisignature.sig(path, sig_level)).float()
-        data.append(signature)
+        times,traj = classes[distr_num]()
+        L, TS = create_TD(False, times, traj, time_add = True)
+        signature = iisignature.sig(TS, sig_level)
+        scalar_term = np.array([1.0], dtype=signature.dtype)
+        signature_with_scalar = np.concatenate([scalar_term, signature])
+        signature_tensor = torch.tensor(signature_with_scalar, dtype=torch.float32)
+        data.append(signature_tensor)
     return data
 
 def create_data():

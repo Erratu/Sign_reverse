@@ -13,16 +13,13 @@ class Discriminator(nn.Module):
         super().__init__()
         self.sign_dim = sign_dim
         self.model = nn.Sequential(
-            nn.Linear(sign_dim, 256),
-            nn.LayerNorm(256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, 64),
-            nn.LayerNorm(64),
-            nn.LeakyReLU(0.2),
-            nn.Linear(64, 1),
+            nn.Linear(sign_dim, 32),
+            nn.LeakyReLU(0.2), 
+            nn.Dropout(0.5),
+            nn.Linear(32, 32),
+            nn.LeakyReLU(0.2), 
+            nn.Dropout(0.5),
+            nn.Linear(32, 1),
         )
 
     def forward(self, x):
@@ -35,13 +32,13 @@ class Generator(nn.Module):
 
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(input_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, sign_dim),
+            nn.Linear(input_dim, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, sign_dim),
         )
 
     def forward(self, x):
@@ -49,18 +46,16 @@ class Generator(nn.Module):
         return out 
 
 def weights_init(m):
-    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv1d) or isinstance(m, nn.Conv2d):
-        nn.init.normal_(m.weight, mean=0.0, std=0.02)
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_normal_(m.weight)
         if m.bias is not None:
             nn.init.constant_(m.bias, 0)
-    elif isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.BatchNorm2d):
-        nn.init.normal_(m.weight, mean=1.0, std=0.02)
+    elif isinstance(m, nn.BatchNorm1d):
+        nn.init.constant_(m.weight, 1)
         nn.init.constant_(m.bias, 0)
 
-def standardize_per_dimension(tensor):
-    mean = tensor.mean(dim=0, keepdim=True) 
-    std = tensor.std(dim=0, keepdim=True).clamp(min=1e-6)
-    standardized = (tensor - mean) / std
+def standardize_per_dimension(tensor, mean, std):
+    standardized = torch.where(std != 0, (tensor - mean) / std, tensor - mean)
     return standardized
         
 class GAN():
@@ -82,14 +77,11 @@ class GAN():
 
         self.discriminator.apply(weights_init)
         self.generator.apply(weights_init)
-        print(self.generator)
-        print(self.discriminator)
 
         self.optim_G = torch.optim.Adam(self.generator.parameters(), lr=self.lr_G, betas=self.betas)
         self.optim_D = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr_D, betas=self.betas)
 
-    def train_step(self, train_data, G_file, D_file):
-
+    def train_step(self, train_data, mean, std, G_file, D_file):
         train_loader = torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=True
         )
@@ -99,25 +91,24 @@ class GAN():
 
         losses_G = []
         losses_D = []
-        
+
         for epoch in range(self.epochs):
             for _, real_samples in enumerate(train_loader):
                 batch_size = real_samples.shape[0]
-
                 for _ in range(CRITIC_ITERS):
                     # Data for training the discriminator
                     latent_space_samples = torch.randn((batch_size, self.input_dim))
                     generated_samples = self.generator(latent_space_samples)
+                    #print("generated :", generated_samples, "\nlatent :", latent_space_samples)
 
-                    real_samples = standardize_per_dimension(real_samples)
-                    generated_samples = standardize_per_dimension(generated_samples)
+                    real_samples_norm = standardize_per_dimension(real_samples, mean, std)
 
                     # Training the discriminator
                     self.discriminator.zero_grad()
-                    output_real = self.discriminator(real_samples)
+                    output_real = self.discriminator(real_samples_norm)
                     output_false = self.discriminator(generated_samples.detach())
 
-                    gp = self.gp(real_samples, generated_samples, self.lamb)
+                    gp = self.gp(real_samples_norm, generated_samples, self.lamb)
 
                     # 4. Compute total D loss (WGAN-GP)
                     d_loss = -output_real.mean() + output_false.mean() + gp
@@ -133,7 +124,6 @@ class GAN():
                 # Training the generator
                 self.generator.zero_grad()
                 generated_samples = self.generator(latent_space_samples)
-                generated_samples = standardize_per_dimension(generated_samples)
                 g_loss = -self.discriminator(generated_samples).mean()
 
                 self.optim_G.zero_grad()
@@ -146,8 +136,8 @@ class GAN():
         
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
-                with open("hyperparams/lambda_search.txt", 'a') as f:
-                    f.write(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}\n")
+                #with open("hyperparams/lambda_search.txt", 'a') as f:
+                #    f.write(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}\n")
                 
             losses_D.append(d_loss.item())
             losses_G.append(g_loss.item())
@@ -187,7 +177,7 @@ class GAN():
         )[0]
 
         # Norme L2 des gradients par échantillon
-        gradients = gradients.view(batch_size, -1)
+        gradients = gradients.view(gradients.size(0), -1)
         gradient_norm = gradients.norm(2, dim=1)
 
         # Pénalité = (||grad||_2 - 1)^2

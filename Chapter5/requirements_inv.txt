@@ -1,5 +1,5 @@
 signatory
-numpy
+numpy<2
 torch
-skfda
+scikit-fda
 scipy
