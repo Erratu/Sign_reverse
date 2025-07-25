@@ -19,6 +19,9 @@ class Discriminator(nn.Module):
             nn.Linear(32, 32),
             nn.LeakyReLU(0.2), 
             nn.Dropout(0.5),
+            nn.Linear(32, 32),
+            nn.LeakyReLU(0.2), 
+            nn.Dropout(0.5),
             nn.Linear(32, 1),
         )
 
@@ -33,6 +36,9 @@ class Generator(nn.Module):
         super().__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, 32),
             nn.BatchNorm1d(32),
             nn.LeakyReLU(0.2),
             nn.Linear(32, 32),
@@ -81,7 +87,7 @@ class GAN():
         self.optim_G = torch.optim.Adam(self.generator.parameters(), lr=self.lr_G, betas=self.betas)
         self.optim_D = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr_D, betas=self.betas)
 
-    def train_step(self, train_data, mean, std, G_file, D_file):
+    def train_step(self, train_data, mean, std, dir):
         train_loader = torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=True
         )
@@ -144,13 +150,13 @@ class GAN():
 
         plt.plot(losses_D, "r.")
         plt.plot(losses_G, "b.")
-        plt.savefig(f"./models_saved/results_{G_file}.png")
+        plt.savefig(f"./models_saved/results_{dir}.png")
         #with open(f"./resultats_num_ep_ex.txt","a") as f:
         #    f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])} \n")
         print(f"Loss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])}")
         plt.show()
-        torch.save(self.generator.state_dict(), f"./models_saved/{G_file}.pt")
-        torch.save(self.discriminator.state_dict(), f"./models_saved/{D_file}.pt")
+        torch.save(self.generator.state_dict(), f"./models_saved/wgan_gp/{dir}/G_model.pt")
+        torch.save(self.discriminator.state_dict(), f"./models_saved/wgan_gp/{dir}/D_model.pt")
 
     def gp(self, real_samples, fake_samples, lambda_gp=10):
         batch_size = real_samples.size(0)

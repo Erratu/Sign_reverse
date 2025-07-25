@@ -14,11 +14,10 @@ import skfda
 
 class SeigalAlgo:
     
-    def __init__(self, TS, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, sig_TS = None, decal_length = 1):
+    def __init__(self, size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, sig_TS = None, decal_length = 1):
         """initialize the inversion algorithm
 
         Args:
-            TS (ndarray): Time Serie to find
             len_base (int): the number of base functions
             chan (int): number of channels of the time series
             real_chan (int): deprecated
@@ -27,13 +26,12 @@ class SeigalAlgo:
             size_base (int): size of the base
             time_chan (bool, optional): indicates if we have time augmentation. Defaults to True.
             decal_length (int, optional): _description_. Defaults to 1.
-            sig_TS (tensor): signature from which retrieve the TS, or None if the signature is computed in the algo.
+            sig_TS (tensor): signature from which retrieve the TS.
         """
         self.len_base = len_base
         self.chan = chan
-        self.T = np.linspace(start = 0, stop = 1, num = TS.shape[-2])
+        self.T = np.linspace(start = 0, stop = 1, num = size_ts)
         self.T_base = np.linspace(start = 0, stop = 1, num = size_base)
-        self.TS = torch.from_numpy(TS)[None]
         self.depth = depth
         self.real_chan = real_chan
         self.insertion = []
@@ -142,14 +140,10 @@ class SeigalAlgo:
        
        
         ########## On calcule les différentes signatures
-        signature_TS = Signature(depth = self.depth,scalar_term= True).to(device)   
         signature_base = Signature(depth = self.depth).to(device)
 
         ### Sig_TS est une collection de tenseurs
-        if self.sig_TS == None :
-            sig_TS = signature_TS(self.TS.to(device))   
-        else:
-            sig_TS = self.sig_TS.detach()
+        sig_TS = self.sig_TS.detach()
         sig_base = signature_base(base) 
 
         def unflatten_sig2(sig):
@@ -213,9 +207,10 @@ class SeigalAlgo:
              #### On calcule [C,A,A,...,A] pour k<= 3
              MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
              MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
+             
 
            ### Objectif 0
-             sig_control = torch.norm(signature_combine(MMD_flat.float(),sig_TS.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
+             sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
              error = sig_control
 
              ### Contrainte de longueur
@@ -232,13 +227,14 @@ class SeigalAlgo:
              val_to_move = ((points[-1]-points[0])**3)/6
              bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
              error = error+bord_control
-
+             
              ### Controle Levy Area
              LA_MMD = 0.5*(MMD[1]-MMD[1].T)
              LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
              LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
-             error = error + LA_control
-             return error+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
+             error = error + LA_control+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
+
+             return error
 
         A = torch.randn([self.chan,self.len_base], requires_grad=True)
 
@@ -249,7 +245,7 @@ class SeigalAlgo:
         if opt == "LBFGS":
                 optimizer = optim.LBFGS([A], lr=lrs)
 
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 400)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 500)
             #loss = nn.MSELoss()
             #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
             #list_A = []

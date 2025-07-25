@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 
 sig_level = 3
 num_signs = 512
-size_ts= 600
 T = 5
 time_add = True
 
@@ -38,59 +37,55 @@ def create_TD(multichan, times, traj, time_add = True):
         #print("MD:",TS.shape)
     return L, TS
 
-def create_polynomial():
+def create_polynomial(size_ts):
     coef_range= (-5,5)
     mult = randint(1,15)
     degree = 5
     noise_std = randint(1,20)
-    times = np.random.uniform(0,10, (size_ts,))
-    times = np.sort(times)
+    times = np.linspace(0,T,num = size_ts)
 
     coefs = np.random.uniform(*coef_range, size=(degree + 1,))
     traj = coefs[0] + sum(coefs[i] * times ** (degree - i) for i in range(1,degree + 1)) + mult*np.random.normal(0, noise_std, size = size_ts)
 
     return times,traj
 
-def create_cosine():
-    mult = random()*0.5
-    coeff = randint(1,5)
-    noise_std = random()*0.5
-    times = np.random.uniform(0,10, (size_ts,))
-    times = np.sort(times)
-    # class = 1
-    f = lambda t: coeff*np.cos(random()*t)+mult*np.random.normal(0, noise_std, size = size_ts)
-    traj = f(times)
-    
-    return times,traj
-
-def create_cosine_without_rand():
+def create_cosine(size_ts):
     mult = random()*0.5
     noise_std = random()*0.5
-    times = np.random.uniform(0,10, (size_ts,))
+    times = np.random.uniform(0,T, (size_ts,))
     times = np.sort(times)
     # class = 1
     f = lambda t: np.cos(t)+mult*np.random.normal(0, noise_std, size = size_ts)
     traj = f(times)
+    
     return times,traj
 
-def create_exp():
-    # class = 2
+def create_sine(size_ts):
     mult = random()*0.5
     noise_std = random()*0.5
-    amplitude_range=(1, 6)
-    mu_range=(4, 6)
-    sigma_range=(0.1, 1.0)
-    a = np.random.uniform(*amplitude_range) 
-    mu = np.random.uniform(*mu_range)       
-    sigma = np.random.uniform(*sigma_range)
-    times = np.random.uniform(0,10, (size_ts,))
+    times = np.random.uniform(0,T, (size_ts,))
     times = np.sort(times)
-
-    f = lambda t: a * np.exp(-((t - mu) ** 2) / (2 * sigma ** 2)) + mult*np.random.normal(0, noise_std, size = size_ts)
+    # class = 1
+    f = lambda t: np.sin(t)+mult*np.random.normal(0, noise_std, size = size_ts)
     traj = f(times)
     return times,traj
 
-def create_noisy_circle():
+def create_exp(size_ts):
+    # class = 2
+    mult = random()*0.5
+    noise_std = random()*0.5
+    mu_range=(4, 6)
+    sigma_range=(0.1, 1.0)
+    mu = np.random.uniform(*mu_range)       
+    sigma = np.random.uniform(*sigma_range)
+    times = np.random.uniform(0,T, (size_ts,))
+    times = np.sort(times)
+
+    f = lambda t: np.exp(-((t - mu) ** 2) / (2 * sigma ** 2)) + mult*np.random.normal(0, noise_std, size = size_ts)
+    traj = f(times)
+    return times,traj
+
+def create_noisy_circle(size_ts):
     # class = 3
     radius_range=(0.1, 1)
     r = np.random.uniform(*radius_range)
@@ -104,28 +99,26 @@ def create_noisy_circle():
     traj = np.array([f1(times),f2(times)])
     return times,traj
 
-def create_brown_1D():
+def create_brown_1D(size_ts):
     # class = 4
     traj = brown(size = size_ts,sig = 1)
-    times = np.random.uniform(0,10, (size_ts,))
-    times = np.sort(times)
+    times = np.linspace(0, 1, num = size_ts)
     return times,traj
 
-def create_brown_multiD():
+def create_brown_multiD(size_ts):
     # class = 5
     dim = 5
     traj = brown(size = (size_ts,dim),sig = 1).T
-    times = np.random.uniform(0,10, (traj.shape[1],))
-    times = np.sort(times)
+    times = np.linspace(0, 1, num = traj.shape[1])
     return times,traj
 
-classes = [create_polynomial,create_cosine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD,create_cosine_without_rand]
+classes = [create_polynomial,create_cosine,create_sine,create_exp,create_noisy_circle,create_brown_1D,create_brown_multiD]
 
-def create_training_data_cgan(num_ex_classes, gen_size):
+def create_training_data_cgan(size_ts, num_ex_classes, gen_size):
     data = []
     for class_num, num_ex in enumerate(num_ex_classes):
         for _ in range(num_ex):
-            times,TS = classes[class_num]()
+            times,TS = classes[class_num](size_ts)
             path = np.column_stack((times, TS))
             signature = torch.from_numpy(iisignature.sig(path, sig_level)).float()
             if signature.shape[0] != max(gen_size):
@@ -133,10 +126,10 @@ def create_training_data_cgan(num_ex_classes, gen_size):
             data.append((signature, class_num))
     return data
 
-def create_training_data_gan(nb_ch, distr_num):
+def create_training_data_gan(size_ts, nb_ch, distr_num):
     data = []
     for _ in range(nb_ch):
-        times,traj = classes[distr_num]()
+        times,traj = classes[distr_num](size_ts)
         L, TS = create_TD(False, times, traj, time_add = True)
         signature = iisignature.sig(TS, sig_level)
         scalar_term = np.array([1.0], dtype=signature.dtype)
@@ -165,9 +158,9 @@ def create_data():
     ]
     return train_set
 
-def TS_graph(distr_num):
+def TS_graph(distr_num, size_ts):
     for _ in range(2):
-        times,TS = classes[distr_num]()
+        times,TS = classes[distr_num](size_ts)
         dim = len(TS.shape)
         if dim != 1 : 
             dim = TS.shape[0]
@@ -181,7 +174,7 @@ def TS_graph(distr_num):
 
 
 if __name__ == "__main__":
-    TS_graph(0)
+    TS_graph(0, 600)
 
     #for num in range(6):
     #   TS = classes[num](times)
