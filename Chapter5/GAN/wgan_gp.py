@@ -5,6 +5,7 @@ from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.autograd as autograd
+from scipy.spatial.distance import pdist
 
 class Discriminator(nn.Module):
 
@@ -142,6 +143,11 @@ class GAN():
         
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
+                indices = torch.randperm(train_data.size(0))[:100]
+                x_real_test = train_data[indices]
+                latent_space_samples = torch.randn((batch_size, self.input_dim))
+                x_fake_test = torch.cat([self.generator(latent_space_samples) for _ in range(10)])
+                print(self.compute_mmd(x_real_test.detach().numpy(), x_fake_test.detach().numpy()))
                 #with open("hyperparams/lambda_search.txt", 'a') as f:
                 #    f.write(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}\n")
                 
@@ -190,3 +196,20 @@ class GAN():
         penalty = ((gradient_norm - 1) ** 2).mean() * lambda_gp
         return penalty
     
+    def rbf_kernel(self, x, y, sigma=1.0):
+        """RBF kernel entre deux matrices x et y (n x d)."""
+        x_norm = np.sum(x**2, axis=1).reshape(-1, 1)
+        y_norm = np.sum(y**2, axis=1).reshape(1, -1)
+        dist_sq = x_norm + y_norm - 2 * np.dot(x, y.T)
+        return np.exp(-dist_sq / (2 * sigma**2))
+    
+    def compute_mmd(self, x_real, x_fake):
+
+        sigma = np.median(pdist(np.vstack([x_real, x_fake])))
+
+        K_XX = self.rbf_kernel(x_real, x_real, sigma)
+        K_YY = self.rbf_kernel(x_fake, x_fake, sigma)
+        K_XY = self.rbf_kernel(x_real, x_fake, sigma)
+
+        mmd = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
+        return mmd

@@ -33,6 +33,7 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
     
     times,traj = create_cosine(size_ts)
     L, TS = create_TD(multichan, times, traj, time_add = True)
+    np.save('Inv_results/TS_ori_1.npy', TS)
     signature = signature_TS(torch.from_numpy(TS)[None].to(device))
     sign_dim = signature.shape[1]
 
@@ -76,6 +77,7 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
     # Recompose signal from A
     recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
+    np.save('Inv_results/gan_A_1.npy', recomposed_signal)
 
     SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature)
     base = SA.define_base(base_name).flip([-2,-1])
@@ -83,6 +85,7 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
     A_original = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
     # Recompose signal from A
     recomposed_signal_original = np.matmul(A_original.detach().numpy(),base[0].detach().numpy().T)
+    np.save('Inv_results/original_A_1.npy', recomposed_signal_original)
     #See the result
 
     if not multichan:
@@ -91,9 +94,10 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
         else:
             i=0
         x_axis = np.linspace(0,1,num = recomposed_signal.shape[1])
-        plt.plot(x_axis,recomposed_signal_original)
+        plt.plot(x_axis,traj-traj[0])
+        plt.plot(x_axis,np.flip(recomposed_signal_original[i+1,:]))
         plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
-        plt.legend(['truth_signal','reconstruction_signal'])
+        plt.legend(['truth_signal','reconstruction_signal','GAN_recon_signal'])
         plt.savefig("Inv_results/reconstruction_gan_cos_comp.png")
         plt.show()
         print(np.mean(traj-traj[0]-recomposed_signal[i+1,:]))

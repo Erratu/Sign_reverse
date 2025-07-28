@@ -9,7 +9,7 @@ import iisignature
 CUDA = False
 batch_size = 32
 lr_G = 1e-5
-lr_D = 1e-5
+lr_D = 1e-4
 num_epochs = 300
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
         
     wgan = WGAN(num_epochs, batch_size, sign_dim, input_dim, loss_function, 10, lr_G, lr_D)
-    wgan.train_step(train_data, mean, std, "cosine")
+    wgan.train_step(data, mean, std, "cosine")
     gen = wgan.generator
     latent_space_samples = torch.randn((batch_size, input_dim))
     gen_data = gen(latent_space_samples) * std + mean
