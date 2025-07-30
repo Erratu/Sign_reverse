@@ -10,12 +10,12 @@ CUDA = False
 batch_size = 32
 lr_G = 1e-4
 lr_D = 2e-4
-num_epochs = 300
+num_epochs = 500
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32
 nb_ch = 2000
 channels = [3,3,3,4,3,7,3]
-size_ts = 600
+size_ts = 100
 
 distr_num = 1
 channel = channels[distr_num]

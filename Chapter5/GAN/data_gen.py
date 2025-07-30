@@ -1,14 +1,14 @@
 import torch
 from torch import nn
 import math
-#import iisignature
+import iisignature
 import numpy as np
 from random import random, randint
 import matplotlib.pyplot as plt
 
 sig_level = 3
 num_signs = 512
-T = 10
+T = 5
 time_add = True
 
 

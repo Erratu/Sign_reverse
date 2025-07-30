@@ -243,7 +243,7 @@ class SeigalAlgo:
         if opt == "LBFGS":
                 optimizer = optim.LBFGS([A], lr=lrs)
 
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 500)
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 400)
             #loss = nn.MSELoss()
             #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
             #list_A = []

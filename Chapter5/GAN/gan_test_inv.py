@@ -9,9 +9,8 @@ from data_gen import data_gen_curve, create_TD
 
 batch_size = 32
 input_dim = 32
-nb_ch = 2000
 device = "cpu"
-size_ts= 600
+size_ts= 100
 
 def test_inverse_GAN(size_ts, multichan, time_add=True):
     """montre le graphe de la TS associée à la signature créée par le GAN.
@@ -71,7 +70,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
     # Recompose signal from A
     recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
-    np.save('Inv_results/gan_A_1.npy', recomposed_signal)
+    np.save('Inv_results/gan_A_cos.npy', recomposed_signal)
 
     SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature)
     base = SA.define_base(base_name).flip([-2,-1])
@@ -79,7 +78,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     A_original = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
     # Recompose signal from A
     recomposed_signal_original = np.matmul(A_original.detach().numpy(),base[0].detach().numpy().T)
-    np.save('Inv_results/original_A_1.npy', recomposed_signal_original)
+    np.save('Inv_results/original_A_cos.npy', recomposed_signal_original)
     #See the result
 
     if not multichan:
