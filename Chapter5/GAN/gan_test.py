@@ -8,8 +8,8 @@ import iisignature
 # Define variables
 CUDA = False
 batch_size = 32
-lr_G = 1e-5
-lr_D = 1e-4
+lr_G = 1e-4
+lr_D = 2e-4
 num_epochs = 300
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32

@@ -13,7 +13,7 @@ nb_ch = 2000
 device = "cpu"
 size_ts= 600
 
-def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
+def test_inverse_GAN(size_ts, multichan, time_add=True):
     """montre le graphe de la TS associée à la signature créée par le GAN.
 
     Args:
@@ -125,4 +125,4 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
         plt.show()
 
 if __name__=="__main__":
-    test_inverse_GAN(nb_ch, size_ts, False, time_add=True)
+    test_inverse_GAN(size_ts, False, time_add=True)
