@@ -5,7 +5,7 @@ import torch
 from signatory import Signature
 
 from wgan_gp import Generator
-from data_gen import create_cosine, create_TD
+from data_gen import data_gen_curve, create_TD
 
 batch_size = 32
 input_dim = 32
@@ -24,14 +24,8 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
     """
 
     signature_TS = Signature(depth = 3,scalar_term= True).to(device)
-    #data = []
-    #for _ in range(nb_ch):
-    #    times,traj = create_polynomial(size_ts)
-    #    L, TS = create_TD(multichan, times, traj, time_add = True)
-    #    signature = signature_TS(torch.from_numpy(TS)[None].to(device))
-    #    data.append(signature)
     
-    times,traj = create_cosine(size_ts)
+    times,traj = data_gen_curve(size_ts, curve=1)
     L, TS = create_TD(multichan, times, traj, time_add = True)
     np.save('Inv_results/TS_ori_1.npy', TS)
     signature = signature_TS(torch.from_numpy(TS)[None].to(device))
@@ -93,17 +87,17 @@ def test_inverse_GAN(nb_ch, size_ts, multichan, time_add=True):
             i = 1
         else:
             i=0
-        x_axis = np.linspace(0,1,num = recomposed_signal.shape[1])
+        x_axis = np.linspace(0,10,num = recomposed_signal_original.shape[1])
         plt.plot(x_axis,traj-traj[0])
         plt.plot(x_axis,np.flip(recomposed_signal_original[i+1,:]))
-        plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
+        #plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
         plt.legend(['truth_signal','reconstruction_signal','GAN_recon_signal'])
-        plt.savefig("Inv_results/reconstruction_gan_cos_comp.png")
+        plt.savefig("Inv_results/reconstruction_cos_pw.png")
         plt.show()
-        print(np.mean(traj-traj[0]-recomposed_signal[i+1,:]))
+        print(np.mean(traj-traj[0]-recomposed_signal_original[i+1,:]))
 
         plt.plot(x_axis,L)
-        plt.plot(x_axis,np.flip(recomposed_signal[1,:]))
+        plt.plot(x_axis,np.flip(recomposed_signal_original[1,:]))
         plt.legend(['truth_length','reconstruction_length'])
         plt.show()
 

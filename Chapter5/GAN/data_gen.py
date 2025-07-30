@@ -1,16 +1,56 @@
 import torch
 from torch import nn
 import math
-#import iisignature
+import iisignature
 import numpy as np
 from random import random, randint
 import matplotlib.pyplot as plt
 
 sig_level = 3
 num_signs = 512
-T = 5
+T = 10
 time_add = True
 
+
+def data_gen_curve(size_ts, curve=1):
+    sigma = 0.1
+    times = np.linspace(0,T,num = size_ts)
+
+    if curve == 0:
+        f = lambda t: t**4 - t**3 - 5*t**2 - 8*t + 4 + sigma*np.random.normal(size = size_ts)
+        idx_ts = np.argsort(times)
+        traj = f(times[idx_ts])
+    if curve == 1:
+        f = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
+        idx_ts = np.argsort(times)
+        traj = f(times[idx_ts])
+    if curve == 2:
+        f = lambda t: np.sin(t)+sigma*np.random.normal(size = size_ts)
+        idx_ts = np.argsort(times)
+        traj = f(times[idx_ts])
+    if curve == 3:
+        f = lambda t: np.exp(-(t-3)**2)+sigma*np.random.normal(size = size_ts)
+        idx_ts = np.argsort(times)
+        traj = f(times[idx_ts])
+    if curve == 4:
+        times = np.linspace(0,2*np.pi,num = size_ts)
+        f1 = lambda t: np.cos(t)+sigma*np.random.normal(size = size_ts)
+        f2 = lambda t: np.sin(t)+sigma*np.random.normal(size = size_ts)
+        traj = np.array([f1(times),f2(times)])
+        idx_ts = np.argsort(times)
+        traj = traj[:,idx_ts]
+        times = times[idx_ts]
+    if curve == 5:
+        traj = brown(size = size_ts,sig = 1)
+        times = np.linspace(0, 1, num = size_ts)
+    if curve == 6:
+        dim = 5
+        traj = brown(size = (size_ts,dim),sig = 1).T
+        times = np.linspace(0, 1, num = traj.shape[1])
+        idx_ts = np.argsort(times)
+        times = times[idx_ts]
+
+    return times, traj
 
 def brown(size,sig=1):
     jump = np.random.normal(loc = 0, scale = sig, size = size)
@@ -129,7 +169,7 @@ def create_training_data_cgan(size_ts, num_ex_classes, gen_size):
 def create_training_data_gan(size_ts, nb_ch, distr_num):
     data = []
     for _ in range(nb_ch):
-        times,traj = classes[distr_num](size_ts)
+        times,traj = data_gen_curve(size_ts, curve=distr_num)
         L, TS = create_TD(False, times, traj, time_add = True)
         signature = iisignature.sig(TS, sig_level)
         scalar_term = np.array([1.0], dtype=signature.dtype)
@@ -160,7 +200,7 @@ def create_data():
 
 def TS_graph(distr_num, size_ts):
     for _ in range(2):
-        times,TS = classes[distr_num](size_ts)
+        times,TS = data_gen_curve(size_ts, curve=distr_num)
         dim = len(TS.shape)
         if dim != 1 : 
             dim = TS.shape[0]
@@ -174,7 +214,7 @@ def TS_graph(distr_num, size_ts):
 
 
 if __name__ == "__main__":
-    TS_graph(0, 600)
+    TS_graph(1, 600)
 
     #for num in range(6):
     #   TS = classes[num](times)
