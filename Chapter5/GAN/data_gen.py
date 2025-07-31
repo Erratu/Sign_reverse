@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import math
-import iisignature
+#import iisignature
 import numpy as np
 from random import random, randint
 import matplotlib.pyplot as plt
