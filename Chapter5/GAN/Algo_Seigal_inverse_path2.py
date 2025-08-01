@@ -305,6 +305,137 @@ class SeigalAlgo:
         print("Loss min at the end: "+str(loss_ref))
 
         return A_temp
+    
+    def calculate_diff(self, A, base, par, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0]):
+        """ Compare sig_TS with the wanted A.
+
+        Args:
+            base (_type_): _description_
+            par (int): deprecated
+            lrs (float, optional): Learning rate. Defaults to 1e-3.
+            limits (int, optional): Number of iterations for optimisation. Defaults to 1e4.
+            opt (str, optional): "Adam", "AdamW" or "LBFGS", selected optimizer. Defaults to "AdamW".
+            eps (_type_, optional): _description_. Defaults to 1e-10.
+            params (list, optional): params are [lambda_length, lambda_frontier, lambda_levy, lambda_ridge].
+            [1,5,0,1] , [5,1,0,1] or the same with lambda_ridge = 0 worked well. Defaults to [1,5,0,0].
+
+        Raises:
+            ValueError: _description_
+            ValueError: _description_
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+    
+        L_control_coeff, bord_control_coeff, LA_control_coeff, ridge_coeff = params
+       
+       
+        if torch.cuda.is_available():
+           device = 'cuda'
+           dtype = torch.cuda.FloatTensor
+        else:
+           device = 'cpu'
+           dtype = torch.FloatTensor
+        
+        loss1 = nn.MSELoss().to(device)
+       
+       
+        ########## On calcule les différentes signatures
+        signature_base = Signature(depth = self.depth).to(device)
+
+        ### Sig_TS est une collection de tenseurs
+        sig_TS = self.sig_TS
+        sig_base = signature_base(base) 
+
+        def unflatten_sig2(sig):
+            sig_unflat = [np.empty(1) for i in range(self.depth)]
+            start = 0
+            stop = self.len_base
+            for k in range(self.depth):
+                sig_unflat[k] = sig[0,start:stop].unflatten(0,[self.len_base]*(k+1))
+                start = stop
+                stop = start + self.len_base**(k+2)
+            return sig_unflat
+
+        sig_base_unf = unflatten_sig2(sig_base.type(dtype))
+
+        d=self.chan
+        sig_TS_unf = [sig_TS[:,1:d+1],sig_TS[:,d+1:d+d**2+1].unflatten(dim=-1,sizes = (d,d)),sig_TS[:,d+d**2+1:d+d**2+d**3+1].unflatten(dim=-1,sizes = (d,d,d))]    
+
+        def mode_dot(x, m, mode):
+           if mode % 1 != 0:
+               raise ValueError('`mode` must be an integer')
+           if x.ndim < mode:
+               raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
+           if m.ndim != 2:
+               raise ValueError('Invalid shape of M: {}'.format(m.shape))
+           return torch.swapaxes(torch.tensordot(torch.swapaxes(x, mode, -1),m.T,dims = 1), mode, -1)
+
+        def multi_mode_dot(x,m,n):
+           MMD = x.T
+           for i in range(n):
+               MMD = mode_dot(MMD,m,mode = i)
+           return MMD.T
+
+        def lengthA(A):
+            return torch.sum(torch.norm(A[:,self.decal_length:],dim = 1))   
+
+        def final_points(A,B):  
+             RS = torch.matmul(B.float(),A.T)[0]
+             checkpoints = RS[[0,-1]]
+             return checkpoints.to(device)
+
+        def flatten_MMD(MMD):
+            chan_sig = signature_channels(self.chan, self.depth,scalar_term=True)
+            sig_flat = torch.ones(chan_sig)
+            words = all_words(self.chan, self.depth)
+            for k in range(chan_sig-1):
+                deg = len(words[k])
+                sig_flat[k+1] = MMD[deg-1][words[k]]
+            return sig_flat
+
+
+        def error_func(A):
+
+            #### On calcule [C,A,A,...,A] pour k<= 3
+            MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
+            MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
+             
+
+            ### Objectif 0
+            sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
+            error = sig_control
+            #print(error)
+
+            ### Contrainte de longueur
+            if self.time_chan:
+                i=1
+            else:
+                i=0
+            L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
+            error = error+L_control
+            #print(L_control)
+
+            ### controle de bords:
+            points = final_points(A,base.flip([-2,-1]).to(device))
+            val_to_reach = torch.tensor([sig_TS_unf[2][0,i,i,i] for i in range(self.chan)])
+            val_to_move = ((points[-1]-points[0])**3)/6
+            bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
+            error = error+bord_control
+            #print(bord_control)
+            
+            ### Controle Levy Area
+            LA_MMD = 0.5*(MMD[1]-MMD[1].T)
+            LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
+            LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
+            error = error + LA_control+ridge_coeff*torch.norm(A)
+            #print(LA_control+ridge_coeff*torch.norm(A))
+            return error
+
+        loss_val = error_func(A.type(dtype)).to(device)
+             
+        return loss_val
        
 def leadlag(X):
     '''

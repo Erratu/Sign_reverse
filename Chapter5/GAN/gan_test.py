@@ -3,7 +3,6 @@ from torch import nn
 #from mmd_gan import MMDGAN
 from data_gen import create_training_data_gan
 from wgan_gp import GAN as WGAN
-import iisignature
 
 # Define variables
 CUDA = False
@@ -19,7 +18,6 @@ size_ts = 100
 
 distr_num = 1
 channel = channels[distr_num]
-sign_dim = iisignature.siglength(channel, 3)+1
 
 #num_classes = 6 # type des données générées
 #num_ex = 400
@@ -39,7 +37,7 @@ if __name__ == "__main__":
 
     torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
         
-    wgan = WGAN(num_epochs, batch_size, sign_dim, input_dim, loss_function, 10, lr_G, lr_D)
+    wgan = WGAN(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
     wgan.train_step(data, mean, std, "cosine")
     gen = wgan.generator
     latent_space_samples = torch.randn((batch_size, input_dim))

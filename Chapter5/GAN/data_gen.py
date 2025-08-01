@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import math
-#import iisignature
+from signatory import Signature
 import numpy as np
 from random import random, randint
 import matplotlib.pyplot as plt
@@ -168,14 +168,12 @@ def create_training_data_cgan(size_ts, num_ex_classes, gen_size):
 
 def create_training_data_gan(size_ts, nb_ch, distr_num):
     data = []
+    signature_TS = Signature(depth = 3,scalar_term= True)
     for _ in range(nb_ch):
         times,traj = data_gen_curve(size_ts, curve=distr_num)
         L, TS = create_TD(False, times, traj, time_add = True)
-        signature = iisignature.sig(TS, sig_level)
-        scalar_term = np.array([1.0], dtype=signature.dtype)
-        signature_with_scalar = np.concatenate([scalar_term, signature])
-        signature_tensor = torch.tensor(signature_with_scalar, dtype=torch.float32)
-        data.append(signature_tensor)
+        signature = signature_TS(torch.from_numpy(TS)[None]).float().squeeze(0)
+        data.append(signature)
     return data
 
 def create_data():

@@ -6,6 +6,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.autograd as autograd
 from scipy.spatial.distance import pdist
+from signatory import Signature, signature_combine, signature_channels
+from Algo_Seigal_inverse_path2 import SeigalAlgo
+
+size_ts = 100
+len_base = size_ts-1
+depth = 3
+n_recons = 2
+real_chan = 0
+size_base = len_base+1
+#Number of iteration for optimisation
+limits = 30000
+#Learning rate (there is a patience schedule)
+lrs = 1e-2
+#Available optimizers : "Adam", "AdamW" and "LBFGS"
+optim = "AdamW"
+# params are [lambda_length, lambda_frontier, lambda_levy, lambda_ridge]
+# [1,5,0,1] , [5,1,0,1] or the same with lambda_ridge = 0 worked well
+params = [1,5,0,0]
+#Available base: "PwLinear", "BSpline", "Fourier"
+base_name = "PwLinear"
 
 class Discriminator(nn.Module):
 
@@ -66,12 +86,13 @@ def standardize_per_dimension(tensor, mean, std):
     return standardized
         
 class GAN():
-    def __init__(self, epochs, batch_size, sign_dim, input_dim, loss_function, lamb, lr_G=1e-4, lr_D=1e-4, betas=(0.0, 0.9), device="cpu"):
+    def __init__(self, epochs, batch_size, channels, input_dim, loss_function, lamb, lr_G=1e-4, lr_D=1e-4, betas=(0.0, 0.9), device="cpu"):
 
         self.epochs = epochs
         self.batch_size = batch_size
         self.device = device
-        self.sign_dim = sign_dim
+        self.chan = channels
+        self.sign_dim = signature_channels(channels, 3, scalar_term=True)
         self.input_dim = input_dim
         self.loss = loss_function
         self.lr_G = lr_G
@@ -98,7 +119,7 @@ class GAN():
 
         losses_G = []
         losses_D = []
-
+        
         for epoch in range(self.epochs):
             for _, real_samples in enumerate(train_loader):
                 batch_size = real_samples.shape[0]
@@ -131,9 +152,21 @@ class GAN():
                 # Training the generator
                 self.generator.zero_grad()
                 generated_samples = self.generator(latent_space_samples)
-                g_loss = -self.discriminator(generated_samples).mean()
+                loss_gan = -self.discriminator(generated_samples).mean()
+
+                if epoch < 10:
+                    loss_inv = 0
+                else:
+                    A_comp = torch.load('Inv_results/original_A_cos_2.pt')
+                    SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
+                    base = SA.define_base(base_name).flip([-2,-1])
+                    loss_inv = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
+
+                coef = min(0.01, loss_gan.item() / (loss_inv + 1e-8))
+                print(loss_gan, coef*loss_inv)
 
                 self.optim_G.zero_grad()
+                g_loss = loss_gan + coef*loss_inv
                 g_loss.backward()
                 self.optim_G.step()
                 #for name, param in self.generator.named_parameters():
@@ -213,3 +246,98 @@ class GAN():
 
         mmd = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
         return mmd
+    
+    def error_func_inv(self, A, sig_TS, par, lrs = 1e-3, limits = 1e4, opt = "AdamW", eps=1e-10, params = [1,5,0,0]):
+
+        L_control_coeff, bord_control_coeff, LA_control_coeff, ridge_coeff = params
+       
+        if torch.cuda.is_available():
+           device = 'cuda'
+           dtype = torch.cuda.FloatTensor
+        else:
+           device = 'cpu'
+           dtype = torch.FloatTensor
+    
+        print("Using "+device)
+        
+        loss1 = nn.MSELoss().to(device)
+       
+        ########## On calcule les différentes signatures
+        signature_base = Signature(depth = self.depth).to(device)
+
+        ### Sig_TS est une collection de tenseurs
+        sig_TS = sig_TS.detach()
+        sig_base = signature_base(base) 
+
+        def unflatten_sig2(sig):
+            sig_unflat = [np.empty(1) for i in range(self.depth)]
+            start = 0
+            stop = self.len_base
+            for k in range(self.depth):
+                sig_unflat[k] = sig[0,start:stop].unflatten(0,[self.len_base]*(k+1))
+                start = stop
+                stop = start + self.len_base**(k+2)
+            return sig_unflat
+
+        sig_base_unf = unflatten_sig2(sig_base.type(dtype))
+
+        d=self.chan
+        sig_TS_unf = [sig_TS[:,1:d+1],sig_TS[:,d+1:d+d**2+1].unflatten(dim=-1,sizes = (d,d)),sig_TS[:,d+d**2+1:d+d**2+d**3+1].unflatten(dim=-1,sizes = (d,d,d))]    
+        
+        def mode_dot(x, m, mode):
+            #x = np.asarray(x)
+            #m = np.asarray(m)
+            if mode % 1 != 0:
+                raise ValueError('`mode` must be an integer')
+            if x.ndim < mode:
+                raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
+            if m.ndim != 2:
+                raise ValueError('Invalid shape of M: {}'.format(m.shape))
+            return torch.swapaxes(torch.tensordot(torch.swapaxes(x, mode, -1),m.T,dims = 1), mode, -1)
+            
+        def multi_mode_dot(x,m,n):
+            MMD = x.T
+            for i in range(n):
+                MMD = mode_dot(MMD,m,mode = i)
+            return MMD.T
+        
+        def lengthA(A):
+            return torch.sum(torch.norm(A[:,self.decal_length:],dim = 1))   
+        
+        def final_points(A,B):  
+            RS = torch.matmul(B.float(),A.T)[0]
+            checkpoints = RS[[0,-1]]
+            return checkpoints.to(device)
+        
+        MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
+        MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
+         
+        ### Objectif 0
+        sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
+        error = sig_control
+        #print(error)
+
+        ### Contrainte de longueur
+        if self.time_chan:
+            i=1
+        else:
+            i=0
+        L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
+        error = error+L_control
+        #print(L_control)
+
+        ### controle de bords:
+        points = final_points(A,base.flip([-2,-1]).to(device))
+        val_to_reach = torch.tensor([sig_TS_unf[2][0,i,i,i] for i in range(self.chan)])
+        val_to_move = ((points[-1]-points[0])**3)/6
+        bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
+        error = error+bord_control
+        #print(bord_control)
+        
+        ### Controle Levy Area
+        LA_MMD = 0.5*(MMD[1]-MMD[1].T)
+        LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
+        LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
+        error = error + LA_control+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
+        #print(ridge_coeff*torch.norm(A))
+        return error
