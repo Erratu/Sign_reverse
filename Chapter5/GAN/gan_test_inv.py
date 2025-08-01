@@ -39,6 +39,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     generator.load_state_dict(torch.load('models_saved/wgan_gp/cosine/G_model.pt'), strict=False)
     latent_space_samples = torch.randn((batch_size, input_dim))
     sign = generator(latent_space_samples) * std + mean
+    latent_space_samples = torch.randn((batch_size, input_dim))
 
     print(signature, sign)
 
@@ -49,7 +50,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     size_base = len_base+1
 
     #Number of iteration for optimisation
-    limits = 20000
+    limits = 30000
     #Learning rate (there is a patience schedule)
     lrs = 1e-2
 
@@ -63,65 +64,68 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     #Available base: "PwLinear", "BSpline", "Fourier"
     base_name = "PwLinear"
 
-    
-    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].unsqueeze(0))
-    base = SA.define_base(base_name).flip([-2,-1])
-    # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
-    A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
-    # Recompose signal from A
-    recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
-    np.save('Inv_results/gan_A_cos.npy', recomposed_signal)
+    A_init = np.load('Inv_results/original_A_cos_1.npy')
+
+    #SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].unsqueeze(0))
+    #base = SA.define_base(base_name).flip([-2,-1])
+    ## Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
+    #A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
+    #torch.save(A, 'Inv_results/gan_A_cos_1.pt')
+    ## Recompose signal from A
+    #recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
 
     SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature)
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A_original = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
+    torch.save(A_original, 'Inv_results/original_A_cos.pt')
     # Recompose signal from A
     recomposed_signal_original = np.matmul(A_original.detach().numpy(),base[0].detach().numpy().T)
-    np.save('Inv_results/original_A_cos.npy', recomposed_signal_original)
+    
     #See the result
 
-    if not multichan:
-        if time_add:
-            i = 1
-        else:
-            i=0
-        x_axis = np.linspace(0,10,num = recomposed_signal_original.shape[1])
-        plt.plot(x_axis,traj-traj[0])
-        plt.plot(x_axis,np.flip(recomposed_signal_original[i+1,:]))
-        #plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
-        plt.legend(['truth_signal','reconstruction_signal','GAN_recon_signal'])
-        plt.savefig("Inv_results/reconstruction_cos_pw.png")
-        plt.show()
-        print(np.mean(traj-traj[0]-recomposed_signal_original[i+1,:]))
-
-        plt.plot(x_axis,L)
-        plt.plot(x_axis,np.flip(recomposed_signal_original[1,:]))
-        plt.legend(['truth_length','reconstruction_length'])
-        plt.show()
-
-    else:
-        x_axis = np.linspace(0,1,num = recomposed_signal.shape[1])
-        signal = traj
-        for i in range(traj.shape[0]):
-            plt.plot(x_axis,signal[i])
-            plt.plot(x_axis,np.flip(recomposed_signal[2+i,:]))
-            plt.legend(['truth_signal','reconstruction_signal'])
-            plt.title(f"channel {i+1}")
-            plt.savefig("Inv_results/reconstruction_gan_cos_comp.png")
-            plt.show()
-
-        print(np.mean(traj-traj[:,0,None]-recomposed_signal[2:,:]))
-
-        plt.plot(L)
-        plt.plot(np.flip(recomposed_signal[1,:]))
-        plt.legend(['truth_length','reconstruction_length'])
-        plt.show()
-
-        plt.plot(times)
-        plt.plot(np.flip(recomposed_signal[0,:]))
-        plt.legend(['truth_times','reconstruction_times'])
-        plt.show()
-
+    #if not multichan:
+    #    if time_add:
+    #        i = 1
+    #    else:
+    #        i=0
+    #    x_axis = np.linspace(0,10,num = recomposed_signal.shape[1])
+    #    plt.plot(x_axis,traj-traj[0])
+    #    plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
+    #    #plt.plot(x_axis,np.flip(recomposed_signal_original[i+1,:]))
+    #    plt.legend(['truth_signal','GAN_recon_signal','reconstruction_signal'])
+    #    plt.savefig("Inv_results/reconstruction_cos_pw1.png")
+    #    plt.show()
+    #    print(np.mean(traj-traj[0]-recomposed_signal[i+1,:]))
+#
+    #    plt.plot(x_axis,L)
+    #    plt.plot(x_axis,np.flip(recomposed_signal[1,:]))
+    #    #plt.plot(x_axis,np.flip(recomposed_signal_original[1,:]))
+    #    plt.legend(['truth_length','GAN_length','reconstruction_length'])
+    #    plt.show()
+#
+    #else:
+    #    x_axis = np.linspace(0,1,num = recomposed_signal.shape[1])
+    #    signal = traj
+    #    for i in range(traj.shape[0]):
+    #        plt.plot(x_axis,signal[i])
+    #        plt.plot(x_axis,np.flip(recomposed_signal[2+i,:]))
+    #        plt.legend(['truth_signal','reconstruction_signal'])
+    #        plt.title(f"channel {i+1}")
+    #        plt.savefig("Inv_results/reconstruction_gan_cos_comp.png")
+    #        plt.show()
+#
+    #    print(np.mean(traj-traj[:,0,None]-recomposed_signal[2:,:]))
+#
+    #    plt.plot(L)
+    #    plt.plot(np.flip(recomposed_signal[1,:]))
+    #    plt.legend(['truth_length','reconstruction_length'])
+    #    plt.show()
+#
+    #    plt.plot(times)
+    #    plt.plot(np.flip(recomposed_signal[0,:]))
+    #    plt.legend(['truth_times','reconstruction_times'])
+    #    plt.show()
+#
 if __name__=="__main__":
     test_inverse_GAN(size_ts, False, time_add=True)

@@ -14,7 +14,7 @@ import skfda
 
 class SeigalAlgo:
     
-    def __init__(self, size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, sig_TS = None, decal_length = 1):
+    def __init__(self, size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan = True, sig_TS = None, A_init = None, decal_length = 1):
         """initialize the inversion algorithm
 
         Args:
@@ -39,6 +39,7 @@ class SeigalAlgo:
         self.time_chan = time_chan
         self.decal_length = decal_length
         self.sig_TS = sig_TS
+        self.A_init = A_init
 
         
     def define_base(self, base_name, T_original = False, order = 3):
@@ -211,6 +212,7 @@ class SeigalAlgo:
             ### Objectif 0
             sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
             error = sig_control
+            #print(error)
 
             ### Contrainte de longueur
             if self.time_chan:
@@ -219,6 +221,7 @@ class SeigalAlgo:
                 i=0
             L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
             error = error+L_control
+            #print(L_control)
 
             ### controle de bords:
             points = final_points(A,base.flip([-2,-1]).to(device))
@@ -226,15 +229,20 @@ class SeigalAlgo:
             val_to_move = ((points[-1]-points[0])**3)/6
             bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
             error = error+bord_control
+            #print(bord_control)
             
             ### Controle Levy Area
             LA_MMD = 0.5*(MMD[1]-MMD[1].T)
             LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
             LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
             error = error + LA_control+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
+            #print(ridge_coeff*torch.norm(A))
             return error
         
-        A = torch.randn([self.chan,self.len_base], requires_grad=True)
+        if self.A_init is not None:
+            A = self.A_init
+        else:
+            A = torch.randn([self.chan,self.len_base], requires_grad=True) 
 
         if opt == "AdamW":
                 optimizer = optim.AdamW([A], lr = lrs)
@@ -243,29 +251,33 @@ class SeigalAlgo:
         if opt == "LBFGS":
                 optimizer = optim.LBFGS([A], lr=lrs)
 
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 400)
-            #loss = nn.MSELoss()
-            #sigTS = sig_TS.view(self.chan, self.chan, self.chan)
-            #list_A = []
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,patience = 50, min_lr = 1e-7)
+        
         i = 0
         loss_ref = np.inf
         A_temp = np.zeros(shape = (1))
 
         par = 0.01
 
+        reset_lr = 1e-2
+
         while i<limits and loss_ref > eps:
             print(f'Step {i}')
             if opt != "LBFGS":
-              optimizer.zero_grad()
-              #MMD = model.forward(A)   
-              loss_val = error_func(A.type(dtype)).to(device)
-              loss_val.backward()
-              print(A.grad)
-              optimizer.step()
-              loss_value = loss_val.clone().detach()
-              sched.step(loss_value)
-              for param_group in optimizer.param_groups:
-                  print(param_group['lr'])
+                optimizer.zero_grad()
+                #MMD = model.forward(A)   
+                loss_val = error_func(A.type(dtype)).to(device)
+                loss_val.backward()
+                optimizer.step()
+                loss_value = loss_val.clone().detach()
+                sched.step(loss_value)
+                current_lr = optimizer.param_groups[0]['lr']
+                print(current_lr)
+                if current_lr <= 1.5e-6 and loss_value > 100:
+                    print(f"🔁 Resetting LR to {reset_lr}")
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = reset_lr
+                    sched._num_bad_epochs = 0
             else:
                  def closure():
                      optimizer.zero_grad()
@@ -276,8 +288,7 @@ class SeigalAlgo:
                  optimizer.step(closure)
                  loss_value = closure().clone().detach()
                  sched.step(loss_value)
-                 for param_group in optimizer.param_groups:
-                     print(param_group['lr'])
+                 print(optimizer.param_groups[0]['lr'])
 
             if loss_value < loss_ref:
                   A_temp = A.clone()

@@ -7,7 +7,7 @@ import iisignature
 
 # Define variables
 CUDA = False
-batch_size = 32
+batch_size = 64
 lr_G = 1e-4
 lr_D = 2e-4
 num_epochs = 500
@@ -33,6 +33,7 @@ sign_dim = iisignature.siglength(channel, 3)+1
 if __name__ == "__main__":
     train_data = create_training_data_gan(size_ts, nb_ch, distr_num)
     data = torch.stack(train_data)
+    torch.save(data, "models_saved/wgan_gp/cosine/training_data.pt")
     mean = data.mean(dim=0, keepdim=True) 
     std = data.std(dim=0, keepdim=True)
 

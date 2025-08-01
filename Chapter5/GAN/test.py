@@ -1,21 +1,43 @@
-import matplotlib.pyplot as plt
 import numpy as np
-from data_gen import create_cosine, create_TD
+import matplotlib.pylab as plt
+import torch
 
-size_ts = 600
+# Dummy model param
+model = torch.nn.Linear(1, 1)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
 
-recomposed_signal = np.load('Inv_results/original_A_1.npy')
-times,traj = create_cosine(size_ts)
-L, TS = create_TD(False, times, traj, time_add = True)
+# CosineAnnealingWarmRestarts scheduler
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+    optimizer, T_0=2000, T_mult=1, eta_min=1e-5
+)
 
-x_axis = np.linspace(0,10,num = recomposed_signal.shape[1])
-plt.plot(x_axis,traj-traj[0])
-plt.plot(x_axis,np.flip(recomposed_signal[2,:]))
-#plt.plot(x_axis,np.flip(recomposed_signal[i+1,:]))
-plt.legend(['truth_signal','reconstruction_signal','GAN_recon_signal'])
-plt.savefig("Inv_results/reconstruction_cos_pw.png")
+# Simuler les valeurs de LR à chaque step
+lr_values = []
+num_steps = 12000  # Total d'étapes à simuler
+
+for step in range(num_steps):
+    scheduler.step(step)
+    lr = optimizer.param_groups[0]['lr']
+    lr_values.append((step, lr))
+
+# Conversion en array pour affichage
+lr_values = np.array(lr_values)
+
+# Affichage
+plt.figure(figsize=(8, 4))
+plt.plot(lr_values[:, 0], lr_values[:, 1], label="LR (CosineWarmRestarts)")
+plt.xlabel("Step")
+plt.ylabel("Learning rate")
+plt.title("CosineAnnealingWarmRestarts")
+plt.grid(True)
+plt.xlim([0, num_steps])
+plt.ylim(bottom=0)
+plt.legend()
+plt.tight_layout()
 plt.show()
-plt.plot(x_axis,L)
-plt.plot(x_axis,np.flip(recomposed_signal[1,:]))
-plt.legend(['truth_length','reconstruction_length'])
+
+plt.hist(variable, bins=50)
+plt.title("Distribution de la variable")
+plt.xlabel("Valeur")
+plt.ylabel("Fréquence")
 plt.show()
