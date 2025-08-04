@@ -157,7 +157,6 @@ class GAN():
                 if epoch < 10:
                     loss_inv = torch.tensor(0.0, requires_grad=True)
                 else:
-                    print(epoch)
                     A_comp = torch.load('Inv_results/original_A_cos_2.pt')
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
                     base = SA.define_base(base_name).flip([-2,-1])
@@ -174,7 +173,7 @@ class GAN():
                 #    if param.grad is not None:
                 #        print(f"{name} grad mean: {param.grad.mean().item()}")
         
-        
+            print(epoch)
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
                 print(loss_gan, 0.5*loss_inv)
