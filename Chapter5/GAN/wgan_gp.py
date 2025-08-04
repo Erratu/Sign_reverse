@@ -1,4 +1,4 @@
-CRITIC_ITERS = 2  # How many critic iterations per generator iteration
+CRITIC_ITERS = 1  # How many critic iterations per generator iteration
 
 import torch
 from torch import nn
@@ -155,18 +155,18 @@ class GAN():
                 loss_gan = -self.discriminator(generated_samples).mean()
 
                 if epoch < 10:
-                    loss_inv = 0
+                    loss_inv = torch.tensor(0.0, requires_grad=True)
                 else:
                     A_comp = torch.load('Inv_results/original_A_cos_2.pt')
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
                     base = SA.define_base(base_name).flip([-2,-1])
                     loss_inv = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
-
-                coef = min(0.01, loss_gan.item() / (loss_inv + 1e-8))
-                print(loss_gan, coef*loss_inv)
+                    if epoch == 0:
+                        max_loss_inv = loss_inv
+                    loss_inv = loss_inv / max_loss_inv + 1e-8
 
                 self.optim_G.zero_grad()
-                g_loss = loss_gan + coef*loss_inv
+                g_loss = loss_gan + 0.5*loss_inv
                 g_loss.backward()
                 self.optim_G.step()
                 #for name, param in self.generator.named_parameters():
@@ -176,6 +176,7 @@ class GAN():
         
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
+                print(loss_gan, 0.5*loss_inv)
                 indices = torch.randperm(train_data.size(0))[:100]
                 x_real_test = train_data[indices]
                 latent_space_samples = torch.randn((batch_size, self.input_dim))

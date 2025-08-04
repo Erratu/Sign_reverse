@@ -8,7 +8,7 @@ from wgan_gp import GAN as WGAN
 CUDA = False
 batch_size = 64
 lr_G = 1e-4
-lr_D = 2e-4
+lr_D = 1e-4
 num_epochs = 500
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32
