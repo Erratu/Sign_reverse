@@ -66,11 +66,11 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
 
     A_init = torch.load('Inv_results/original_A_cos_2.pt')
 
-    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].unsqueeze(0), A_init=A_init)
+    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].detach().unsqueeze(0), A_init=A_init)
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
-    torch.save(A, 'Inv_results/gan_A_cos_1.pt')
+    torch.save(A, 'Inv_results/gan_A_cos_3.pt')
     # Recompose signal from A
     recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
 
@@ -78,7 +78,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A_original = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
-    torch.save(A_original, 'Inv_results/original_A_cos_2.pt')
+    torch.save(A_original, 'Inv_results/original_A_cos_3.pt')
     # Recompose signal from A
     recomposed_signal_original = np.matmul(A_original.detach().numpy(),base[0].detach().numpy().T)
     

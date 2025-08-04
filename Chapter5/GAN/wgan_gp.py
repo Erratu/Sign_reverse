@@ -1,4 +1,4 @@
-CRITIC_ITERS = 1  # How many critic iterations per generator iteration
+CRITIC_ITERS = 2  # How many critic iterations per generator iteration
 
 import torch
 from torch import nn
@@ -121,7 +121,7 @@ class GAN():
         losses_D = []
         
         for epoch in range(self.epochs):
-            for _, real_samples in enumerate(train_loader):
+            for i, real_samples in enumerate(train_loader):
                 batch_size = real_samples.shape[0]
                 for _ in range(CRITIC_ITERS):
                     # Data for training the discriminator
@@ -154,29 +154,30 @@ class GAN():
                 generated_samples = self.generator(latent_space_samples)
                 loss_gan = -self.discriminator(generated_samples).mean()
 
-                if epoch < 10:
-                    loss_inv = torch.tensor(0.0, requires_grad=True)
+                if epoch < 60:
+                    loss_inv_ori = torch.tensor(0.0, requires_grad=True)
+                    loss_inv = loss_inv_ori
                 else:
                     A_comp = torch.load('Inv_results/original_A_cos_2.pt')
+                    generated_samples = self.generator(latent_space_samples) * std + mean
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
                     base = SA.define_base(base_name).flip([-2,-1])
-                    loss_inv = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
-                    if epoch == 10:
-                        max_loss_inv = loss_inv
-                    loss_inv = loss_inv / max_loss_inv + 1e-8
+                    loss_inv_ori = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
+                    if epoch == 60 and i == 0:
+                        max_loss_inv = loss_inv_ori.item()
+                    loss_inv = loss_inv_ori / max_loss_inv + 1e-8
 
                 self.optim_G.zero_grad()
-                g_loss = loss_gan + 0.5*loss_inv
+                g_loss = loss_gan + loss_inv
                 g_loss.backward()
                 self.optim_G.step()
                 #for name, param in self.generator.named_parameters():
                 #    if param.grad is not None:
                 #        print(f"{name} grad mean: {param.grad.mean().item()}")
         
-            print(epoch)
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
-                print(loss_gan, 0.5*loss_inv)
+                print(loss_inv_ori)
                 indices = torch.randperm(train_data.size(0))[:100]
                 x_real_test = train_data[indices]
                 latent_space_samples = torch.randn((batch_size, self.input_dim))
@@ -248,97 +249,4 @@ class GAN():
         mmd = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
         return mmd
     
-    def error_func_inv(self, A, sig_TS, par, lrs = 1e-3, limits = 1e4, opt = "AdamW", eps=1e-10, params = [1,5,0,0]):
-
-        L_control_coeff, bord_control_coeff, LA_control_coeff, ridge_coeff = params
-       
-        if torch.cuda.is_available():
-           device = 'cuda'
-           dtype = torch.cuda.FloatTensor
-        else:
-           device = 'cpu'
-           dtype = torch.FloatTensor
     
-        print("Using "+device)
-        
-        loss1 = nn.MSELoss().to(device)
-       
-        ########## On calcule les différentes signatures
-        signature_base = Signature(depth = self.depth).to(device)
-
-        ### Sig_TS est une collection de tenseurs
-        sig_TS = sig_TS.detach()
-        sig_base = signature_base(base) 
-
-        def unflatten_sig2(sig):
-            sig_unflat = [np.empty(1) for i in range(self.depth)]
-            start = 0
-            stop = self.len_base
-            for k in range(self.depth):
-                sig_unflat[k] = sig[0,start:stop].unflatten(0,[self.len_base]*(k+1))
-                start = stop
-                stop = start + self.len_base**(k+2)
-            return sig_unflat
-
-        sig_base_unf = unflatten_sig2(sig_base.type(dtype))
-
-        d=self.chan
-        sig_TS_unf = [sig_TS[:,1:d+1],sig_TS[:,d+1:d+d**2+1].unflatten(dim=-1,sizes = (d,d)),sig_TS[:,d+d**2+1:d+d**2+d**3+1].unflatten(dim=-1,sizes = (d,d,d))]    
-        
-        def mode_dot(x, m, mode):
-            #x = np.asarray(x)
-            #m = np.asarray(m)
-            if mode % 1 != 0:
-                raise ValueError('`mode` must be an integer')
-            if x.ndim < mode:
-                raise ValueError('Invalid shape of X for mode = {}: {}'.format(mode, x.shape))
-            if m.ndim != 2:
-                raise ValueError('Invalid shape of M: {}'.format(m.shape))
-            return torch.swapaxes(torch.tensordot(torch.swapaxes(x, mode, -1),m.T,dims = 1), mode, -1)
-            
-        def multi_mode_dot(x,m,n):
-            MMD = x.T
-            for i in range(n):
-                MMD = mode_dot(MMD,m,mode = i)
-            return MMD.T
-        
-        def lengthA(A):
-            return torch.sum(torch.norm(A[:,self.decal_length:],dim = 1))   
-        
-        def final_points(A,B):  
-            RS = torch.matmul(B.float(),A.T)[0]
-            checkpoints = RS[[0,-1]]
-            return checkpoints.to(device)
-        
-        MMD = [multi_mode_dot(sig_base_unf[i].float(), A, i+1) for i in range(3)]
-        MMD_flat = flatten_MMD(MMD)[None].float().to(device)#.type(dtype)
-         
-        ### Objectif 0
-        sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
-        error = sig_control
-        #print(error)
-
-        ### Contrainte de longueur
-        if self.time_chan:
-            i=1
-        else:
-            i=0
-        L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
-        error = error+L_control
-        #print(L_control)
-
-        ### controle de bords:
-        points = final_points(A,base.flip([-2,-1]).to(device))
-        val_to_reach = torch.tensor([sig_TS_unf[2][0,i,i,i] for i in range(self.chan)])
-        val_to_move = ((points[-1]-points[0])**3)/6
-        bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
-        error = error+bord_control
-        #print(bord_control)
-        
-        ### Controle Levy Area
-        LA_MMD = 0.5*(MMD[1]-MMD[1].T)
-        LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
-        LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
-        error = error + LA_control+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
-        #print(ridge_coeff*torch.norm(A))
-        return error

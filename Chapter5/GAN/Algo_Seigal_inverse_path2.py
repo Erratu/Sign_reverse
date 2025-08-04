@@ -144,7 +144,7 @@ class SeigalAlgo:
         signature_base = Signature(depth = self.depth).to(device)
 
         ### Sig_TS est une collection de tenseurs
-        sig_TS = self.sig_TS.detach()
+        sig_TS = self.sig_TS
         sig_base = signature_base(base) 
 
         def unflatten_sig2(sig):
