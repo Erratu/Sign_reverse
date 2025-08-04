@@ -161,7 +161,7 @@ class GAN():
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
                     base = SA.define_base(base_name).flip([-2,-1])
                     loss_inv = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
-                    if epoch == 0:
+                    if epoch == 10:
                         max_loss_inv = loss_inv
                     loss_inv = loss_inv / max_loss_inv + 1e-8
 
