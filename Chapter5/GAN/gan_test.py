@@ -2,14 +2,14 @@ import torch
 from torch import nn
 #from mmd_gan import MMDGAN
 from data_gen import create_training_data_gan
-from wgan_gp import GAN as WGAN
+from wgan_gp_test import GAN as WGAN
 
 # Define variables
 CUDA = False
 batch_size = 64
 lr_G = 1e-4
 lr_D = 1e-4
-num_epochs = 500
+num_epochs = 800
 loss_function = nn.BCEWithLogitsLoss()
 input_dim = 32
 nb_ch = 2000
