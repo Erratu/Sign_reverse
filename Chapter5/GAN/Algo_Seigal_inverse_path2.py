@@ -212,7 +212,7 @@ class SeigalAlgo:
             ### Objectif 0
             sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
             error = sig_control
-            #print(error)
+            print(error)
 
             ### Contrainte de longueur
             if self.time_chan:
@@ -221,7 +221,7 @@ class SeigalAlgo:
                 i=0
             L_control = L_control_coeff* loss1(lengthA(A).float(),sig_TS[0,i].float()).float()
             error = error+L_control
-            #print(L_control)
+            print(L_control)
 
             ### controle de bords:
             points = final_points(A,base.flip([-2,-1]).to(device))
@@ -229,14 +229,14 @@ class SeigalAlgo:
             val_to_move = ((points[-1]-points[0])**3)/6
             bord_control = bord_control_coeff*torch.norm(val_to_reach.float().to(device)-val_to_move.float().to(device))
             error = error+bord_control
-            #print(bord_control)
+            print(bord_control)
             
             ### Controle Levy Area
             LA_MMD = 0.5*(MMD[1]-MMD[1].T)
             LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
             LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
             error = error + LA_control+ridge_coeff*torch.norm(A)#sig_control.float()+L_control.float()+bord_control.float()
-            #print(ridge_coeff*torch.norm(A))
+            print(ridge_coeff*torch.norm(A))
             return error
         
         if self.A_init is not None:
@@ -404,9 +404,9 @@ class SeigalAlgo:
              
 
             ### Objectif 0
-            sig_control = torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2
+            sig_control = torch.sqrt(torch.mean(torch.norm(signature_combine(sig_TS.float(),MMD_flat.float(),self.chan,self.depth,scalar_term = True).T[-d**3:])**2))
             error = sig_control
-            #print(error)
+            #print(1, error)
 
             ### Contrainte de longueur
             if self.time_chan:
@@ -425,12 +425,11 @@ class SeigalAlgo:
             error = error+bord_control
             #print(bord_control)
             
-            ### Controle Levy Area
+            ### Controle Levy Area : inactif avec ces params
             LA_MMD = 0.5*(MMD[1]-MMD[1].T)
             LA = 0.5*(sig_TS_unf[1]-sig_TS_unf[1].T)
-            LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)**2
+            LA_control = LA_control_coeff*torch.norm(LA-LA_MMD)
             error = error + LA_control+ridge_coeff*torch.norm(A)
-            #print(LA_control+ridge_coeff*torch.norm(A))
             return error
 
         loss_val = error_func(A.type(dtype)).to(device)

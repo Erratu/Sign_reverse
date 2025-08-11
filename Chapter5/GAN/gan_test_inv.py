@@ -39,7 +39,6 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     generator.load_state_dict(torch.load('models_saved/wgan_gp/cosine/G_model.pt'), strict=False)
     latent_space_samples = torch.randn((batch_size, input_dim))
     sign = generator(latent_space_samples) * std + mean
-    latent_space_samples = torch.randn((batch_size, input_dim))
 
     print(signature, sign)
 

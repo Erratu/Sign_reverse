@@ -1,4 +1,4 @@
-CRITIC_ITERS = 2  # How many critic iterations per generator iteration
+CRITIC_ITERS = 4  # How many critic iterations per generator iteration
 
 import torch
 from torch import nn
@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.autograd as autograd
 from scipy.spatial.distance import pdist
-from signatory import Signature, signature_combine, signature_channels
+from signatory import signature_channels
 from Algo_Seigal_inverse_path2 import SeigalAlgo
 
 size_ts = 100
@@ -120,71 +120,85 @@ class GAN():
         losses_G = []
         losses_D = []
         
+        num_ep = 0
         for epoch in range(self.epochs):
+            num_ep += 1
             for i, real_samples in enumerate(train_loader):
                 batch_size = real_samples.shape[0]
-                for _ in range(CRITIC_ITERS):
-                    # Data for training the discriminator
+
+                if (20 < epoch <= 40) or (epoch > 40 and num_ep > 10):
+                    for _ in range(CRITIC_ITERS):
+                        # Data for training the discriminator
+                        latent_space_samples = torch.randn((batch_size, self.input_dim))
+                        generated_samples = self.generator(latent_space_samples)
+                        #print("generated :", generated_samples, "\nlatent :", latent_space_samples)
+    
+                        real_samples_norm = standardize_per_dimension(real_samples, mean, std)
+    
+                        # Training the discriminator
+                        self.discriminator.zero_grad()
+                        output_real = self.discriminator(real_samples_norm)
+                        output_false = self.discriminator(generated_samples.detach())
+    
+                        gp = self.gp(real_samples_norm, generated_samples, self.lamb)
+    
+                        # 4. Compute total D loss (WGAN-GP)
+                        d_loss = -output_real.mean() + output_false.mean() + gp
+    
+                        # 5. Optimize D
+                        self.optim_D.zero_grad()
+                        d_loss.backward()
+                        self.optim_D.step()
+    
+                    # Data for training the generator
                     latent_space_samples = torch.randn((batch_size, self.input_dim))
+                    # Training the generator
+                    self.generator.zero_grad()
+                    self.optim_G.zero_grad()
                     generated_samples = self.generator(latent_space_samples)
-                    #print("generated :", generated_samples, "\nlatent :", latent_space_samples)
+                    g_loss = -self.discriminator(generated_samples).mean()
+                    g_loss.backward()
+                    self.optim_G.step()
 
-                    real_samples_norm = standardize_per_dimension(real_samples, mean, std)
+                    if epoch % 10 == 0 and i == 0:
+                        losses_D.append(d_loss.item())
+                        losses_G.append(g_loss.item())
+                        print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
+                        indices = torch.randperm(train_data.size(0))[:100]
+                        x_real_test = train_data[indices]
+                        latent_space_samples = torch.randn((batch_size, self.input_dim))
+                        x_fake_test = torch.cat([self.generator(latent_space_samples) for _ in range(10)])
+                        print(self.compute_mmd(x_real_test.detach().numpy(), x_fake_test.detach().numpy()))
+                        if (epoch > 40 and num_ep == 20) or epoch == 40:
+                            num_ep = 0
 
-                    # Training the discriminator
-                    self.discriminator.zero_grad()
-                    output_real = self.discriminator(real_samples_norm)
-                    output_false = self.discriminator(generated_samples.detach())
-
-                    gp = self.gp(real_samples_norm, generated_samples, self.lamb)
-
-                    # 4. Compute total D loss (WGAN-GP)
-                    d_loss = -output_real.mean() + output_false.mean() + gp
-
-                    # 5. Optimize D
-                    self.optim_D.zero_grad()
-                    d_loss.backward()
-                    self.optim_D.step()
-
-                # Data for training the generator
-                latent_space_samples = torch.randn((batch_size, self.input_dim))
-
-                torch.autograd.set_detect_anomaly(True)
-                
-                # Training the generator
-                self.generator.zero_grad()
-                self.optim_G.zero_grad()
-                generated_samples = self.generator(latent_space_samples)
-                g_loss = -self.discriminator(generated_samples).mean()
-                g_loss.backward(retain_graph=True)
-                self.optim_G.step()
-
-                if epoch >= 60:
+                if epoch <= 20 or (epoch > 40 and num_ep <= 10):
                     self.optim_G.zero_grad()
                     A_comp = torch.load('Inv_results/original_A_cos_2.pt')
-                    generated_samples = generated_samples * std + mean
+                    latent_space_samples = torch.randn((batch_size, self.input_dim))
+                    generated_samples = self.generator(latent_space_samples) * std + mean
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
                     base = SA.define_base(base_name).flip([-2,-1])
                     loss_inv_ori = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
-                    if epoch == 60 and i == 0:
-                        max_loss_inv = loss_inv_ori.item()
-                    loss_inv = loss_inv_ori / max_loss_inv + 1e-8
+                    if epoch == 0 and i == 0:
+                        scale = loss_inv_ori.item()
+                    else:
+                        scale = 0.99 * scale + 0.01 * loss_inv_ori.item()
+                    loss_inv = loss_inv_ori / (scale + 1e-8)
                     loss_inv.backward()
+                    #torch.nn.utils.clip_grad_norm_(self.generator.parameters(), max_norm=5.0)
                     self.optim_G.step()
-                    print(loss_inv_ori)
-        
-            if epoch % 10 == 0:
-                print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
-                indices = torch.randperm(train_data.size(0))[:100]
-                x_real_test = train_data[indices]
-                latent_space_samples = torch.randn((batch_size, self.input_dim))
-                x_fake_test = torch.cat([self.generator(latent_space_samples) for _ in range(10)])
-                print(self.compute_mmd(x_real_test.detach().numpy(), x_fake_test.detach().numpy()))
-                #with open("hyperparams/lambda_search.txt", 'a') as f:
-                #    f.write(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}\n")
-                
-            losses_D.append(d_loss.item())
-            losses_G.append(g_loss.item())
+                    if i == 0:
+                        print(epoch, loss_inv_ori)
+                        print(loss_inv)
+                        total_norm = 0.0
+                        for p in self.generator.parameters():
+                            if p.grad is not None:
+                                param_norm = p.grad.data.norm(2)  # norme L2 du gradient de ce paramètre
+                                total_norm += param_norm.item() ** 2
+                        total_norm = total_norm ** 0.5  # racine pour la norme L2 globale
+                        print(f"Gradient norm: {total_norm:.4f}")
+                        print(generated_samples[0])
 
         plt.plot(losses_D, "r.")
         plt.plot(losses_G, "b.")

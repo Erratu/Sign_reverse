@@ -6,26 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.autograd as autograd
 from scipy.spatial.distance import pdist
-from signatory import Signature, signature_combine, signature_channels
-from Algo_Seigal_inverse_path2 import SeigalAlgo
-
-size_ts = 100
-len_base = size_ts-1
-depth = 3
-n_recons = 2
-real_chan = 0
-size_base = len_base+1
-#Number of iteration for optimisation
-limits = 30000
-#Learning rate (there is a patience schedule)
-lrs = 1e-2
-#Available optimizers : "Adam", "AdamW" and "LBFGS"
-optim = "AdamW"
-# params are [lambda_length, lambda_frontier, lambda_levy, lambda_ridge]
-# [1,5,0,1] , [5,1,0,1] or the same with lambda_ridge = 0 worked well
-params = [1,5,0,0]
-#Available base: "PwLinear", "BSpline", "Fourier"
-base_name = "PwLinear"
+from signatory import signature_channels
 
 class Discriminator(nn.Module):
 
@@ -119,9 +100,9 @@ class GAN():
 
         losses_G = []
         losses_D = []
-        
+
         for epoch in range(self.epochs):
-            for i, real_samples in enumerate(train_loader):
+            for _, real_samples in enumerate(train_loader):
                 batch_size = real_samples.shape[0]
                 for _ in range(CRITIC_ITERS):
                     # Data for training the discriminator
@@ -152,32 +133,18 @@ class GAN():
                 # Training the generator
                 self.generator.zero_grad()
                 generated_samples = self.generator(latent_space_samples)
-                loss_gan = -self.discriminator(generated_samples).mean()
-
-                if epoch < 60:
-                    loss_inv_ori = torch.tensor(0.0, requires_grad=True)
-                    loss_inv = loss_inv_ori
-                else:
-                    A_comp = torch.load('Inv_results/original_A_cos_2.pt')
-                    generated_samples = self.generator(latent_space_samples) * std + mean
-                    SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
-                    base = SA.define_base(base_name).flip([-2,-1])
-                    loss_inv_ori = SA.calculate_diff(A_comp, base, par = 1, lrs = 1e-3, limits = 1e4,opt = "AdamW",eps=1e-10, params = [1,5,0,0])
-                    if epoch == 60 and i == 0:
-                        max_loss_inv = loss_inv_ori.item()
-                    loss_inv = loss_inv_ori / max_loss_inv + 1e-8
+                g_loss = -self.discriminator(generated_samples).mean()
 
                 self.optim_G.zero_grad()
-                g_loss = loss_gan + loss_inv
                 g_loss.backward()
                 self.optim_G.step()
                 #for name, param in self.generator.named_parameters():
                 #    if param.grad is not None:
                 #        print(f"{name} grad mean: {param.grad.mean().item()}")
         
+        
             if epoch % 10 == 0:
                 print(f"Epoch: {epoch} Loss D.: {d_loss} Loss G.: {g_loss}")
-                print(loss_inv_ori)
                 indices = torch.randperm(train_data.size(0))[:100]
                 x_real_test = train_data[indices]
                 latent_space_samples = torch.randn((batch_size, self.input_dim))
@@ -248,5 +215,3 @@ class GAN():
 
         mmd = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
         return mmd
-    
-    
