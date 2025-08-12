@@ -202,13 +202,13 @@ class GAN():
 
         plt.plot(losses_D, "r.")
         plt.plot(losses_G, "b.")
-        plt.savefig(f"./models_saved/results_{dir}.png")
+        plt.savefig(f"./models_saved/results_inv_{dir}.png")
         #with open(f"./resultats_num_ep_ex.txt","a") as f:
         #    f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])} \n")
         print(f"Loss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])}")
         plt.show()
-        torch.save(self.generator.state_dict(), f"./models_saved/wgan_gp/{dir}/G_model.pt")
-        torch.save(self.discriminator.state_dict(), f"./models_saved/wgan_gp/{dir}/D_model.pt")
+        torch.save(self.generator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_G_model.pt")
+        torch.save(self.discriminator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_D_model.pt")
 
     def gp(self, real_samples, fake_samples, lambda_gp=10):
         batch_size = real_samples.size(0)

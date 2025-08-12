@@ -38,21 +38,30 @@ if __name__ == "__main__":
     mean = data.mean(dim=0, keepdim=True) 
     std = data.std(dim=0, keepdim=True)
 
-    torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
+    #torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
         
     wgan = WGAN(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
-    wgan.train_step(data, mean, std, "cosine")
-    gen = wgan.generator
+    #wgan.train_step(data, mean, std, "cosine")
+    #gen = wgan.generator
+
     latent_space_samples = torch.randn((batch_size, input_dim))
     gen_data = gen(latent_space_samples) * std + mean
 
-    wgan_inv = WGAN_inv(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
-    wgan_inv.train_step(data, mean, std, "cosine")
-    gen_inv = wgan_inv.generator
+    #wgan_inv = WGAN_inv(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
+    #wgan_inv.train_step(data, mean, std, "cosine")
+    #gen_inv = wgan_inv.generator
+    
     latent_space_samples = torch.randn((batch_size, input_dim))
     gen_inv_data = gen_inv(latent_space_samples) * std + mean
 
     print(data, gen_data, gen_inv_data)
+
+    X_real_flat = data.reshape(-1, data.shape[-1])  # shape ((E*T), D)
+    gen_data_flat  = gen_data.reshape(-1, data.shape[-1])
+    gen_inv_flat  = gen_inv_data.reshape(-1, data.shape[-1])
+    print("mean real/gen:", X_real_flat.mean(axis=0), gen_data_flat.mean(axis=0), gen_inv_flat.mean(axis=0))
+    print("std  real/gen:", X_real_flat.std(axis=0), gen_data_flat.std(axis=0), gen_inv_flat.std(axis=0))
+    print("MSE between reps:", np.mean((X_real_flat-gen_data_flat)**2))
 
     # test avec l'inv des deux gan et comparaison
     times,traj = data_gen_curve(size_ts, curve=1)
@@ -84,7 +93,7 @@ if __name__ == "__main__":
     #Available base: "PwLinear", "BSpline", "Fourier"
     base_name = "PwLinear"
 
-    A_init = torch.load('Inv_results/original_A_cos_2.pt')
+    A_init = torch.load('Inv_results/original_A_cos_3.pt')
 
     SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].detach().unsqueeze(0), A_init=A_init)
     base = SA.define_base(base_name).flip([-2,-1])
