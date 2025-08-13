@@ -3,9 +3,9 @@ from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
 from data_gen import create_training_data_gan, data_gen_curve, create_TD
-from wgan_gp_loss_inv import GAN as WGAN_inv
-from wgan_gp import GAN as WGAN
+from unused.wgan_gp import GAN as WGAN, Generator as Gen
 from Algo_Seigal_inverse_path2 import SeigalAlgo
+from signatory import Signature
 
 # Define variables
 CUDA = False
@@ -32,45 +32,30 @@ channel = channels[distr_num]
 
 
 if __name__ == "__main__":
+
+    device = "cpu"
+
     train_data = create_training_data_gan(size_ts, nb_ch, distr_num)
     data = torch.stack(train_data)
     torch.save(data, "models_saved/wgan_gp/cosine/training_data.pt")
     mean = data.mean(dim=0, keepdim=True) 
     std = data.std(dim=0, keepdim=True)
 
-    #torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
-        
+    torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
+       
     wgan = WGAN(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
-    #wgan.train_step(data, mean, std, "cosine")
-    #gen = wgan.generator
-
-    latent_space_samples = torch.randn((batch_size, input_dim))
-    gen_data = gen(latent_space_samples) * std + mean
-
-    #wgan_inv = WGAN_inv(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
-    #wgan_inv.train_step(data, mean, std, "cosine")
-    #gen_inv = wgan_inv.generator
-    
-    latent_space_samples = torch.randn((batch_size, input_dim))
-    gen_inv_data = gen_inv(latent_space_samples) * std + mean
-
-    print(data, gen_data, gen_inv_data)
-
-    X_real_flat = data.reshape(-1, data.shape[-1])  # shape ((E*T), D)
-    gen_data_flat  = gen_data.reshape(-1, data.shape[-1])
-    gen_inv_flat  = gen_inv_data.reshape(-1, data.shape[-1])
-    print("mean real/gen:", X_real_flat.mean(axis=0), gen_data_flat.mean(axis=0), gen_inv_flat.mean(axis=0))
-    print("std  real/gen:", X_real_flat.std(axis=0), gen_data_flat.std(axis=0), gen_inv_flat.std(axis=0))
-    print("MSE between reps:", np.mean((X_real_flat-gen_data_flat)**2))
+    wgan.train_step(data, mean, std, "cosine")
+    gen = wgan.generator
 
     # test avec l'inv des deux gan et comparaison
+    signature_TS = Signature(depth = 3,scalar_term= True).to(device)
+    
     times,traj = data_gen_curve(size_ts, curve=1)
     L, TS = create_TD(False, times, traj, time_add = True)
+    signature = signature_TS(torch.from_numpy(TS)[None].to(device))
 
     latent_space_samples = torch.randn((batch_size, input_dim))
     sign = gen(latent_space_samples) * std + mean
-    latent_space_samples = torch.randn((batch_size, input_dim))
-    sign_inv = gen_inv(latent_space_samples) * std + mean
 
     len_base = size_ts-1
     depth = 3
@@ -102,7 +87,7 @@ if __name__ == "__main__":
     # Recompose signal from A
     recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
 
-    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign_inv[0].detach().unsqueeze(0), A_init=A_init)
+    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature, A_init=A_init)
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)

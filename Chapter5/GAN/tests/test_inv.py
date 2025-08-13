@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import torch
 from signatory import Signature
 
-from wgan_gp import Generator
 from data_gen import data_gen_curve, create_TD
 
 batch_size = 32
