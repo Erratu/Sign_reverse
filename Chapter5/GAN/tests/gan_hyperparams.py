@@ -30,7 +30,7 @@ channel = channels[distr_num]
 #mmd_num_epochs = 200
 
 
-if __name__ == "__main__":
+def search_gan():
     train_data = create_training_data_gan(size_ts, nb_ch, distr_num)
     data = torch.stack(train_data)
     mean = data.mean(dim=0, keepdim=True) 
@@ -101,3 +101,6 @@ if __name__ == "__main__":
 
     mse_corr = ((cov_real - cov_gen)**2).mean()
     print("MSE corrélations:", mse_corr.item())
+
+    if __name__ == "__main__":
+        search_gan()
