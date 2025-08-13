@@ -35,8 +35,6 @@ def search_gan():
     data = torch.stack(train_data)
     mean = data.mean(dim=0, keepdim=True) 
     std = data.std(dim=0, keepdim=True)
-
-    sign_dim = signature_channels(channel, 3, scalar_term=True)
     
     num_epochs = 800
     wgan = GAN(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
@@ -102,5 +100,5 @@ def search_gan():
     mse_corr = ((cov_real - cov_gen)**2).mean()
     print("MSE corrélations:", mse_corr.item())
 
-    if __name__ == "__main__":
-        search_gan()
+if __name__ == "__main__":
+    search_gan()
