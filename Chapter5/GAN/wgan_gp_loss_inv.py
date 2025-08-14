@@ -174,7 +174,7 @@ class GAN():
 
                 if epoch <= 20 or (epoch > 40 and num_ep <= 10):
                     self.optim_G.zero_grad()
-                    A_comp = torch.load('Inv_results/original_A_cos_2.pt')
+                    A_comp = torch.load('Inv_results/original_A_brown1D_3.pt')
                     latent_space_samples = torch.randn((batch_size, self.input_dim))
                     generated_samples = self.generator(latent_space_samples) * std + mean
                     SA = SeigalAlgo(size_ts, len_base, self.chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=generated_samples[0].unsqueeze(0))
@@ -207,8 +207,8 @@ class GAN():
         #    f.write(f"num_epochs:{self.epochs}, num_exs:{len(train_data)//self.num_classes} : \nLoss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])} \n")
         print(f"Loss D.: {np.mean(losses_D[self.epochs-100:])} Loss G.: {np.mean(losses_G[self.epochs-100:])}")
         plt.show()
-        torch.save(self.generator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_G_model.pt")
-        torch.save(self.discriminator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_D_model.pt")
+        torch.save(self.generator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_G_model_1.pt")
+        torch.save(self.discriminator.state_dict(), f"./models_saved/wgan_gp/{dir}/inv_D_model_1.pt")
 
     def gp(self, real_samples, fake_samples, lambda_gp=10):
         batch_size = real_samples.size(0)

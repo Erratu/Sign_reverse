@@ -1,9 +1,11 @@
 import numpy as np
-from Algo_Seigal_inverse_path2 import SeigalAlgo
 import matplotlib.pyplot as plt
 import torch
 from signatory import Signature
+import sys, os
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from Algo_Seigal_inverse_path2 import SeigalAlgo
 from data_gen import data_gen_curve, create_TD
 
 batch_size = 32
@@ -23,7 +25,7 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
 
     signature_TS = Signature(depth = 3,scalar_term= True).to(device)
     
-    times,traj = data_gen_curve(size_ts, curve=1)
+    times,traj = data_gen_curve(size_ts, curve=5)
     L, TS = create_TD(multichan, times, traj, time_add = True)
     np.save('Inv_results/TS_ori_1.npy', TS)
     signature = signature_TS(torch.from_numpy(TS)[None].to(device))
@@ -49,13 +51,13 @@ def test_inverse_GAN(size_ts, multichan, time_add=True):
     #Available base: "PwLinear", "BSpline", "Fourier"
     base_name = "PwLinear"
 
-    A_init = torch.load('Inv_results/original_A_cos_2.pt')
+    A_init = torch.load('Inv_results/original_A_brown1D_2.pt')
 
     SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature, A_init=A_init)
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A_original = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
-    torch.save(A_original, 'Inv_results/original_A_cos_3.pt')
+    torch.save(A_original, 'Inv_results/original_A_brown1D_3.pt')
     # Recompose signal from A
     recomposed_signal_original = np.matmul(A_original.detach().numpy(),base[0].detach().numpy().T)
     

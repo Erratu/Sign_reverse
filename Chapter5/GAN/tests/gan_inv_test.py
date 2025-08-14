@@ -2,10 +2,13 @@ import torch
 from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
-from data_gen import create_training_data_gan, data_gen_curve, create_TD
-from unused.wgan_gp import GAN as WGAN, Generator as Gen
-from Algo_Seigal_inverse_path2 import SeigalAlgo
 from signatory import Signature
+import sys, os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data_gen import data_gen_curve, create_TD
+from wgan_gp_loss_inv import Generator as Gen_inv
+from Algo_Seigal_inverse_path2 import SeigalAlgo
 
 # Define variables
 CUDA = False
@@ -34,28 +37,25 @@ channel = channels[distr_num]
 if __name__ == "__main__":
 
     device = "cpu"
-
-    train_data = create_training_data_gan(size_ts, nb_ch, distr_num)
-    data = torch.stack(train_data)
-    torch.save(data, "models_saved/wgan_gp/cosine/training_data.pt")
-    mean = data.mean(dim=0, keepdim=True) 
-    std = data.std(dim=0, keepdim=True)
-
-    torch.save({'mean': mean, 'std': std}, "models_saved/wgan_gp/cosine/stats_gan.pt")
-       
-    wgan = WGAN(num_epochs, batch_size, channel, input_dim, loss_function, 10, lr_G, lr_D)
-    wgan.train_step(data, mean, std, "cosine")
-    gen = wgan.generator
-
     # test avec l'inv des deux gan et comparaison
     signature_TS = Signature(depth = 3,scalar_term= True).to(device)
-    
+
     times,traj = data_gen_curve(size_ts, curve=1)
     L, TS = create_TD(False, times, traj, time_add = True)
     signature = signature_TS(torch.from_numpy(TS)[None].to(device))
 
+    sign_dim = signature.shape[1]
+
+    data_stats = torch.load("models_saved/wgan_gp/cosine/stats_gan.pt")
+    mean = data_stats['mean']
+    std = data_stats['std']
+
+    gen_inv = Gen_inv(input_dim, sign_dim)
+    gen_inv.load_state_dict(torch.load('models_saved/wgan_gp/cosine/inv_G_model_1.pt'), strict=False) 
+
     latent_space_samples = torch.randn((batch_size, input_dim))
-    sign = gen(latent_space_samples) * std + mean
+    sign = gen_inv(latent_space_samples) 
+    sign = torch.where(std != 0, sign * std + mean, sign + mean)
 
     len_base = size_ts-1
     depth = 3
@@ -80,30 +80,21 @@ if __name__ == "__main__":
 
     A_init = torch.load('Inv_results/original_A_cos_3.pt')
 
-    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].detach().unsqueeze(0), A_init=A_init)
+    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=sign[0].detach().unsqueeze(0))
     base = SA.define_base(base_name).flip([-2,-1])
     # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
     A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
     # Recompose signal from A
     recomposed_signal = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
 
-    SA = SeigalAlgo(size_ts, len_base, chan, real_chan, depth, n_recons, size_base, time_chan=True, sig_TS=signature, A_init=A_init)
-    base = SA.define_base(base_name).flip([-2,-1])
-    # Retrieve A from depth 3 signature. "par" is deprecated for the moment. If cuda is available, compute automatically from cuda.
-    A = SA.retrieve_coeff_base(base, par = 1, limits = limits, lrs = lrs, opt = optim, params = params)
-    # Recompose signal from A
-    recomposed_signal_inv = np.matmul(A.detach().numpy(),base[0].detach().numpy().T)
-
     x_axis = np.linspace(0,10,num = recomposed_signal.shape[1])
     plt.plot(x_axis,traj-traj[0])
     plt.plot(x_axis,np.flip(recomposed_signal[2,:]))
-    plt.plot(x_axis,np.flip(recomposed_signal_inv[2,:]))
     plt.legend(['truth_signal','GAN_recon_signal','reconstruction_signal'])
     plt.savefig("Inv_results/reconstruction_cos_pw1.png")
     plt.show()
     print(np.mean(traj-traj[0]-recomposed_signal[2,:]))
     plt.plot(x_axis,L)
     plt.plot(x_axis,np.flip(recomposed_signal[1,:]))
-    plt.plot(x_axis,np.flip(recomposed_signal_inv[1,:]))
     plt.legend(['truth_length','GAN_length','reconstruction_length'])
     plt.show()
