@@ -56,18 +56,17 @@ def simulate_cde_trajectory(X, V, y0=None):
         Y[t] = Y[t-1] + V * Y[t-1] * dX[t]
 
     return normalize(Y)
-# ===============================
-# Exemple d’utilisation
-# ===============================
 
 def sign_calcul(X, Y):
-    X = torch.tensor(X, dtype=torch.float32).unsqueeze(1)
-    Y = torch.tensor(Y, dtype=torch.float32).unsqueeze(1)
-    XY = torch.cat([X, Y], dim=1).unsqueeze(0)  # batch dim
+    X = torch.tensor(X, dtype=torch.float32).unsqueeze(-1) # (T,)->(T,1) ou (B, T)->(B, T, 1)
+    Y = torch.tensor(Y, dtype=torch.float32).unsqueeze(-1)
+    XY = torch.cat([X, Y], dim=-1)  # batch dim : (T, 2) ou (B, T, 2)
+    if len(XY.shape) < 3:
+        XY = XY.unsqueeze(0)
+    
     sig = signature_TS(XY)
-
-    S_12 = sig[0, -3]
-    S_21 = sig[0, -2]
+    S_12 = sig[:, -3]
+    S_21 = sig[:, -2]
 
     return S_12, S_21
 
@@ -89,6 +88,16 @@ def dataset_correlation(X):
     return np.mean(corrs)
 
 def dataset_creation(type, corr_strength=0.8, V=0.1):
+    """generate X and Y with the type of generation
+
+    Args:
+        type (str): if the data will be correlated, generated with a cde or independant
+        corr_strength (float, optional): stregth of the correlation it the correlation type is choose. Defaults to 0.8.
+        V (float, optional): coefficient of the cde it the cde type is choose. Defaults to 0.1.
+
+    Returns:
+        ndarray, ndarray: 2 ndarrays, one with the sigs of shape (N,2) and the other with the data of shape (N,2,T)
+    """
     sigs = np.empty((N,2))
     data = np.empty((N,2,T)) 
     for i in range(N):
@@ -100,8 +109,8 @@ def dataset_creation(type, corr_strength=0.8, V=0.1):
         elif type == 'indep':
             Y1 = generate_independent_series(T)
         S1, S2 = sign_calcul(X1, Y1)
-        sigs[i,0] = S1
-        sigs[i,1] = S2
+        sigs[i,0] = S1[0]
+        sigs[i,1] = S2[0]
         data[i,0] = X1
         data[i,1] = Y1
     return sigs, data
@@ -141,8 +150,99 @@ def datasets_creation_3():
 
     return datasets, datasets_sig
 
+def central_quantile(arr):
+    intervals = [50, 90]
+
+    # centré autour de 0
+    for alpha in intervals:
+        # calcul du quantile à inclure moitié de chaque côté
+        q = np.percentile(np.abs(arr), alpha/2)
+        plt.axvline(-q, color="orange", linestyle="--", linewidth=1.2)
+        plt.axvline(q, color="orange", linestyle="--", linewidth=1.2)
+        plt.text(q, plt.ylim()[1]*0.85, f"{alpha}%", rotation=90,
+                 color="orange", va="top", ha="center", fontsize=8)
+    
+    # Ligne 0
+    plt.axvline(0, color="red", linestyle="--", linewidth=1.5)
+    plt.text(0, plt.ylim()[1]*0.9, "0", rotation=90, color="red", va="top", ha="center", fontsize=8)
+
+
+    #centré autour de la médiane (aussi possible : centré autour du pic avec kde)
+    #for alpha in intervals:
+    #    lower = (100 - alpha)/2
+    #    upper = 100 - lower
+    #    q_low, q_high = np.percentile(arr, [lower, upper])
+    #    plt.axvline(q_low, color="orange", linestyle="--", linewidth=1.2)
+    #    plt.axvline(q_high, color="orange", linestyle="--", linewidth=1.2)
+    #    plt.text(q_high, plt.ylim()[1]*0.85, f"{alpha}%", rotation=90,
+    #             color="orange", va="top", ha="center", fontsize=8)
+
+    ## Ligne pour la médiane
+    #median = np.median(arr)
+    #plt.axvline(median, color="red", linestyle="--", linewidth=1.5)
+    #plt.text(median, plt.ylim()[1]*0.9, "median", rotation=90,
+    #         color="red", va="top", ha="center", fontsize=8)
+
+def hd_interval(arr,alpha=0.9):
+    """Retourne le plus petit intervalle contenant alpha% des données."""
+    sorted_arr = np.sort(arr)
+    n = len(arr)
+    k = int(np.floor(alpha * n))
+    intervals = sorted_arr[k:] - sorted_arr[:n-k]   # largeur de tous les intervalles possibles
+    min_idx = np.argmin(intervals)                  # index de l'intervalle le plus petit
+    return sorted_arr[min_idx], sorted_arr[min_idx + k]
+
+def graph_hdi(arr):
+    # Intervalle HDI à 90%
+    lower, upper = hd_interval(arr, alpha=0.9)
+    plt.axvline(lower, color="orange", linestyle="--", linewidth=1.5)
+    plt.axvline(upper, color="orange", linestyle="--", linewidth=1.5)
+    plt.text(upper, plt.ylim()[1]*0.85, "90% HDI", rotation=90, color="orange", va="top", ha="center", fontsize=8)
+    
+    # Intervalle HDI à 50%
+    lower, upper = hd_interval(arr, alpha=0.5)
+    plt.axvline(lower, color="yellow", linestyle="--", linewidth=1.5)
+    plt.axvline(upper, color="yellow", linestyle="--", linewidth=1.5)
+    plt.text(upper, plt.ylim()[1]*0.85, "50% HDI", rotation=90, color="yellow", va="top", ha="center", fontsize=8)
+
+    # quantile à 5-95% pour capter l'asymétrie
+    qs = [5, 95]
+    quantiles = np.percentile(arr, qs)
+
+    # Ajout des lignes verticales
+    for q, val in zip(qs, quantiles):
+        plt.axvline(val, color="red" if q==50 else "green", linestyle="--", linewidth=1.5)
+        plt.text(val, plt.ylim()[1]*0.85, f"{q}%", rotation=90,
+                color="red" if q==50 else "green", va="top", ha="center", fontsize=8)
+        
+def peak_measure(arr):
+    # proportion dans un petit intervalle autour du pic
+    peak = np.median(arr)  # ou mode via KDE
+    delta = 0.1 * (arr.max()-arr.min())  # intervalle autour du pic
+    prop = np.mean((arr > peak-delta) & (arr < peak+delta))
+
+    from scipy.stats import kurtosis
+    k = kurtosis(arr, fisher=True)  # kurtosis de Fisher, 0 pour Gauss
+
+    from scipy.stats import gaussian_kde
+    from scipy.signal import find_peaks
+
+    kde = gaussian_kde(arr)
+    xs = np.linspace(arr.min(), arr.max(), 1000)
+    ys = kde(xs)
+    peaks, _ = find_peaks(ys, height=0.05)  # seuil à ajuster
+    n_peaks = len(peaks)
+
+    hist, _ = np.histogram(arr, bins=30, density=True)
+    hist = hist[hist>0]
+    entropy = -np.sum(hist * np.log(hist))
+
+    #print(prop, k, n_peaks, entropy)
+
+    return prop, k
+
 def comparaison_3():
-    datasets, datasets_sig = datasets_creation_3()
+    _, datasets_sig = datasets_creation_3()
 
     print("Indep vs Corr:", compare_marginals(datasets_sig["indep"], datasets_sig["corr_2"]))
     print("Indep vs CDE:", compare_marginals(datasets_sig["indep"], datasets_sig["cde_1"]))
@@ -164,6 +264,97 @@ def comparaison_3():
         plt.ylabel("S_21")
     plt.tight_layout()
     plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, (name, data) in enumerate(datasets_sig.items(), 1):
+        plt.subplot(2,3,i)
+        plt.hist(data[:,0], bins=20, color="tab:blue")
+        plt.title(name)
+        plt.ylabel("S_12")
+        graph_hdi(data[:,0])
+        peak_measure(data[:,0])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, (name, data) in enumerate(datasets_sig.items(), 1):
+        plt.subplot(2,3,i)
+        plt.hist(data[:,1], bins=20, color="tab:blue")
+        plt.title(name)
+        plt.ylabel("S_21")
+        graph_hdi(data[:,1])
+        peak_measure(data[:,1])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, (name, data) in enumerate(datasets_sig.items(), 1):
+        plt.subplot(2,3,i)
+        plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
+        plt.title(name)
+        plt.ylabel("Levy area")
+        graph_hdi(0.5*(data[:,0]-data[:,1]))
+        peak_measure(0.5*(data[:,0]-data[:,1]))
+    plt.tight_layout()
+    plt.show()
+
+def test_levi_separation():
+    measures = {"indep":[],"corr_1":[],"corr_2":[],"cde_1":[],"cde_2":[]}
+    for _ in range(20):
+        _, datasets_sig = datasets_creation_3()
+        for _, (name, data) in enumerate(datasets_sig.items(), 1):
+            measures[name].append(peak_measure(0.5*(data[:,0]-data[:,1])))
+
+    # Pourcentiles à calculer
+    quantiles = [0, 25, 50, 75, 100]
+
+    summary = {}
+
+    for var, samples in measures.items():
+        arr = np.array(samples)  # shape (n_samples, 2)
+        stats = {}
+        for i, name in enumerate(["prop", "k"]):
+            vals = arr[:, i]
+            stats[name] = {
+                "mean": np.mean(vals),
+                "std": np.std(vals),
+                "min": np.min(vals),
+                "max": np.max(vals),
+                "quantiles": {f"{q}%": np.percentile(vals, q) for q in quantiles}
+            }
+        summary[var] = stats
+
+    # Affichage
+    import pprint
+    pprint.pprint(summary)
+
+def search_thre():
+    N = 500
+    measures = {"indep":[],"corr":[],"cde":[]}
+    for _ in range(N):
+        _, datasets_sig = datasets_creation_3()
+        for _, (name, data) in enumerate(datasets_sig.items(), 1):
+            measures[name.split("_")[0]].append(peak_measure(0.5*(data[:,0]-data[:,1])))
+
+    k_values = np.linspace(0, 5, 50)      # à ajuster selon tes données
+    prop_values = np.linspace(0, 1, 50)
+
+    best_score = N*5
+    best_thresh = (0,0)
+
+    for k_thresh in k_values:
+        for prop_thresh in prop_values:
+            # Compter les variables qui respectent le seuil
+            valid = [v for v in measures["cde"] if v[1] >= k_thresh and v[0] >= prop_thresh]
+            invalid = [v for v in measures["indep"]+measures["corr"] if v[1] >= k_thresh and v[0] >= prop_thresh]
+            score = len(measures["cde"]) - len(valid) + len(invalid)  # ici score = nb de variables correctement classées
+            if score < best_score:
+                best_score = score
+                best_thresh = (k_thresh, prop_thresh)
+
+    print(f"Seuil optimal : k >= {best_thresh[0]:.3f}, prop >= {best_thresh[1]:.3f}")
+    invalid_percent = (best_score / N) * 20
+    print(f"Pourcentage de variables qui ne respectent pas le seuil : {invalid_percent:.2f}%")
 
 def datasets_creation_corr():
 
@@ -195,13 +386,46 @@ def datasets_creation_cde():
     for i, V in enumerate(np.linspace(0.1, 2.0, 12)):
         sigs.append(dataset_creation('cde', V=V)[0])
 
-    plt.figure(figsize=(20,15))
+    plt.figure(figsize=(15,10))
     for i, data in enumerate(sigs, 1):
         plt.subplot(3,4,i)
         plt.scatter(data[:,0], data[:,1])
-        plt.title(V)
+        plt.title(i)
         plt.xlabel("S_12")
         plt.ylabel("S_21")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(sigs, 1):
+        plt.subplot(3,4,i)
+        plt.hist(data[:,0], bins=20, color="tab:blue")
+        plt.title(i)
+        plt.ylabel("S_12")
+        graph_hdi(data[:,0])
+        peak_measure(data[:,0])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(sigs, 1):
+        plt.subplot(3,4,i)
+        plt.hist(data[:,1], bins=20, color="tab:blue")
+        plt.title(i)
+        plt.ylabel("S_21")
+        graph_hdi(data[:,1])
+        peak_measure(data[:,1])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(sigs, 1):
+        plt.subplot(3,4,i)
+        plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
+        plt.title(i)
+        plt.ylabel("Levy area")
+        graph_hdi(0.5*(data[:,0]-data[:,1]))
+        peak_measure(0.5*(data[:,0]-data[:,1]))
     plt.tight_layout()
     plt.show()
 
@@ -266,6 +490,143 @@ def TS_graph():
     plt.grid(True)
     plt.show()
 
+
+def offset_test():
+    V = np.random.randn()*0.1
+    _, data = dataset_creation('cde', V=V)
+
+    def generate_shifted_XY(data, max_lag=8):
+        """
+        Crée une liste de versions de data où Y est décalé par rapport à X.
+
+        data : array (N, 2, T)
+        max_lag : entier, nombre de décalages à générer
+
+        Retourne :
+            shifted_datasets : liste de longueur max_lag
+                               chaque élément est un array (N, 2, T-lag)
+        """
+
+        X = data[:, 0]   # (N, T)
+        N,T = X.shape
+        Y = data[:, 1, :T-max_lag]   # (N, T-max_lag)
+
+        shifted_datasets = []
+        for lag in range(0, max_lag+1):
+            X_aligned = X[:, lag:T-max_lag+lag]     # (N, T-max_lag)
+            S1, S2 = sign_calcul(X_aligned, Y) # (N,)
+            shifted_datasets.append(np.array([S1, S2]))
+        return shifted_datasets
+
+    dataset = generate_shifted_XY(data)
+
+    # --- Visualisation ---
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(3,3,i)
+        plt.scatter(data[0], data[1])
+        plt.title(i-1)
+        plt.xlabel("S_12")
+        plt.ylabel("S_21")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(3,3,i)
+        plt.hist(data[0], bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("S_12")
+        graph_hdi(data[0])
+        peak_measure(data[0])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(3,3,i)
+        plt.hist(data[1], bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("S_21")
+        graph_hdi(data[1])
+        peak_measure(data[1])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(3,3,i)
+        plt.hist(0.5*(data[0]-data[1]), bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("Levy area")
+        graph_hdi(0.5*(data[0]-data[1]))
+        peak_measure(0.5*(data[0]-data[1]))
+    plt.tight_layout()
+    plt.show()
+
+def test_with_data():
+    df = pd.read_csv("sign_study/data_test_GECCO.csv").dropna()
+    data = df.iloc[:,-3].values.astype(float)
+    mean, std = np.mean(data, axis = 0), np.std(data, axis = 0)
+    std = np.where(std == 0, 1e-8, std)
+    data_norm = (data - mean) / std
+    T = data_norm.shape[0]
+    y_ind = np.empty((50, T))
+    y_cde = np.empty((50, T))
+    y_corr = np.empty((50, T))
+    for i in range(50):
+        y_ind[i] = generate_independent_series(T)
+        y_cde[i] = simulate_cde_trajectory(data_norm, V=np.random.randn()*0.1, y0=1.0)
+        y_corr[i] = generate_correlated_series(data_norm, corr_strength=0.8)
+    dataset = []
+    dataset.append(np.array(sign_calcul(data_norm, y_ind)))
+    dataset.append(np.array(sign_calcul(data_norm, y_corr)))
+    dataset.append(np.array(sign_calcul(data_norm, y_cde)))
+
+    # --- Visualisation ---
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(1,3,i)
+        plt.scatter(data[0], data[1])
+        plt.title(i-1)
+        plt.xlabel("S_12")
+        plt.ylabel("S_21")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(1,3,i)
+        plt.hist(data[0], bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("S_12")
+        graph_hdi(data[0])
+        peak_measure(data[0])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(1,3,i)
+        plt.hist(data[1], bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("S_21")
+        graph_hdi(data[1])
+        peak_measure(data[1])
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15,10))
+    for i, data in enumerate(dataset, 1):
+        plt.subplot(1,3,i)
+        plt.hist(0.5*(data[0]-data[1]), bins=20, color="tab:blue")
+        plt.title(i-1)
+        plt.ylabel("Levy area")
+        graph_hdi(0.5*(data[0]-data[1]))
+        peak_measure(0.5*(data[0]-data[1]))
+    plt.tight_layout()
+    plt.show()
+
 # -----------------------
 # Main : génération
 # -----------------------
@@ -276,4 +637,4 @@ if __name__ == "__main__":
 
     signature_TS = Signature(depth = 2,scalar_term= True).to("cpu")
 
-    TS_graph()
+    test_with_data()
