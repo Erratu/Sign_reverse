@@ -204,7 +204,6 @@ def graph_hdi(arr):
     plt.axvline(lower, color="yellow", linestyle="--", linewidth=1.5)
     plt.axvline(upper, color="yellow", linestyle="--", linewidth=1.5)
     plt.text(upper, plt.ylim()[1]*0.85, "50% HDI", rotation=90, color="yellow", va="top", ha="center", fontsize=8)
-
     # quantile à 5-95% pour capter l'asymétrie
     qs = [5, 95]
     quantiles = np.percentile(arr, qs)
@@ -214,6 +213,8 @@ def graph_hdi(arr):
         plt.axvline(val, color="red" if q==50 else "green", linestyle="--", linewidth=1.5)
         plt.text(val, plt.ylim()[1]*0.85, f"{q}%", rotation=90,
                 color="red" if q==50 else "green", va="top", ha="center", fontsize=8)
+        
+    return upper-lower
         
 def peak_measure(arr):
     # proportion dans un petit intervalle autour du pic
@@ -288,15 +289,35 @@ def comparaison_3():
     plt.show()
 
     plt.figure(figsize=(15,10))
+    print("Levy")
     for i, (name, data) in enumerate(datasets_sig.items(), 1):
         plt.subplot(2,3,i)
         plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
         plt.title(name)
         plt.ylabel("Levy area")
-        graph_hdi(0.5*(data[:,0]-data[:,1]))
+        hdi = graph_hdi(0.5*(data[:,0]-data[:,1]))
+        print(name, hdi)
         peak_measure(0.5*(data[:,0]-data[:,1]))
     plt.tight_layout()
     plt.show()
+
+def test_hdi_indic():
+    N = 5
+    for i in range(N):
+        _, datasets_sig = datasets_creation_3()
+
+        plt.figure(figsize=(15,10))
+        print("Levy")
+        for i, (name, data) in enumerate(datasets_sig.items(), 1):
+            plt.subplot(2,3,i)
+            plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
+            plt.title(name)
+            plt.ylabel("Levy area")
+            hdi = graph_hdi(0.5*(data[:,0]-data[:,1]))
+            print(name, hdi)
+            peak_measure(0.5*(data[:,0]-data[:,1]))
+        plt.tight_layout()
+        plt.show()
 
 def test_levi_separation():
     measures = {"indep":[],"corr_1":[],"corr_2":[],"cde_1":[],"cde_2":[]}
@@ -386,48 +407,65 @@ def datasets_creation_cde():
     for i, V in enumerate(np.linspace(0.1, 2.0, 12)):
         sigs.append(dataset_creation('cde', V=V)[0])
 
-    plt.figure(figsize=(15,10))
-    for i, data in enumerate(sigs, 1):
-        plt.subplot(3,4,i)
-        plt.scatter(data[:,0], data[:,1])
-        plt.title(i)
-        plt.xlabel("S_12")
-        plt.ylabel("S_21")
-    plt.tight_layout()
-    plt.show()
+    #plt.figure(figsize=(15,10))
+    #for i, data in enumerate(sigs, 1):
+    #    plt.subplot(3,4,i)
+    #    plt.scatter(data[:,0], data[:,1])
+    #    plt.title(i)
+    #    plt.xlabel("S_12")
+    #    plt.ylabel("S_21")
+    #plt.tight_layout()
+    #plt.show()
+#
+    #plt.figure(figsize=(15,10))
+    #for i, data in enumerate(sigs, 1):
+    #    plt.subplot(3,4,i)
+    #    plt.hist(data[:,0], bins=20, color="tab:blue")
+    #    plt.title(i)
+    #    plt.ylabel("S_12")
+    #    graph_hdi(data[:,0])
+    #    peak_measure(data[:,0])
+    #plt.tight_layout()
+    #plt.show()
+#
+    #plt.figure(figsize=(15,10))
+    #for i, data in enumerate(sigs, 1):
+    #    plt.subplot(3,4,i)
+    #    plt.hist(data[:,1], bins=20, color="tab:blue")
+    #    plt.title(i)
+    #    plt.ylabel("S_21")
+    #    graph_hdi(data[:,1])
+    #    peak_measure(data[:,1])
+    #plt.tight_layout()
+    #plt.show()
 
     plt.figure(figsize=(15,10))
-    for i, data in enumerate(sigs, 1):
-        plt.subplot(3,4,i)
-        plt.hist(data[:,0], bins=20, color="tab:blue")
-        plt.title(i)
-        plt.ylabel("S_12")
-        graph_hdi(data[:,0])
-        peak_measure(data[:,0])
-    plt.tight_layout()
-    plt.show()
-
-    plt.figure(figsize=(15,10))
-    for i, data in enumerate(sigs, 1):
-        plt.subplot(3,4,i)
-        plt.hist(data[:,1], bins=20, color="tab:blue")
-        plt.title(i)
-        plt.ylabel("S_21")
-        graph_hdi(data[:,1])
-        peak_measure(data[:,1])
-    plt.tight_layout()
-    plt.show()
-
-    plt.figure(figsize=(15,10))
+    print("Levi")
     for i, data in enumerate(sigs, 1):
         plt.subplot(3,4,i)
         plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
         plt.title(i)
         plt.ylabel("Levy area")
-        graph_hdi(0.5*(data[:,0]-data[:,1]))
-        peak_measure(0.5*(data[:,0]-data[:,1]))
+        hdi = graph_hdi(0.5*(data[:,0]-data[:,1]))
+        print(i, hdi)
     plt.tight_layout()
     plt.show()
+
+    sigs = []
+    for i, corr in enumerate(np.linspace(0.1, 1.0, 12)):
+        sigs.append(dataset_creation('corr', corr_strength=corr)[0])
+
+    plt.figure(figsize=(15,10))
+    print("Levi")
+    for i, data in enumerate(sigs, 1):
+        plt.subplot(3,4,i)
+        plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
+        plt.title(i)
+        plt.ylabel("Levy area")
+        hdi = graph_hdi(0.5*(data[:,0]-data[:,1]))
+        print(i, hdi)
+    plt.tight_layout()
+    plt.show()    
 
 def extract_features(F):
     feats = {}
@@ -489,7 +527,6 @@ def TS_graph():
     plt.legend()
     plt.grid(True)
     plt.show()
-
 
 def offset_test():
     V = np.random.randn()*0.1
@@ -565,29 +602,37 @@ def offset_test():
     plt.show()
 
 def test_with_data():
+    N=100
+
     df = pd.read_csv("sign_study/data_test_GECCO.csv").dropna()
     data = df.iloc[:,-3].values.astype(float)
+
+    df = pd.read_csv("sign_study/data_test_TADA.csv").dropna()
+    data = df.iloc[:,1].values.astype(float)
+
     mean, std = np.mean(data, axis = 0), np.std(data, axis = 0)
     std = np.where(std == 0, 1e-8, std)
     data_norm = (data - mean) / std
     T = data_norm.shape[0]
-    y_ind = np.empty((50, T))
-    y_cde = np.empty((50, T))
-    y_corr = np.empty((50, T))
-    for i in range(50):
-        y_ind[i] = generate_independent_series(T)
-        y_cde[i] = simulate_cde_trajectory(data_norm, V=np.random.randn()*0.1, y0=1.0)
-        y_corr[i] = generate_correlated_series(data_norm, corr_strength=0.8)
-    dataset = []
-    dataset.append(np.array(sign_calcul(data_norm, y_ind)))
-    dataset.append(np.array(sign_calcul(data_norm, y_corr)))
-    dataset.append(np.array(sign_calcul(data_norm, y_cde)))
+    y_ind = np.empty((N, 2))
+    y_cde = np.empty((N, 2))
+    y_corr = np.empty((N, 2))
+    for i in range(N):
+        gen = generate_independent_series(T)
+        S12, S21 = sign_calcul(data_norm, gen)
+        y_ind[i] = S12[0], S21[0]
+        gen = simulate_cde_trajectory(data_norm, V=np.random.randn()*0.1, y0=1.0)
+        S12, S21 = sign_calcul(data_norm, gen)
+        y_cde[i] = S12[0], S21[0]
+        gen = generate_correlated_series(data_norm, corr_strength=np.random.random())
+        S12, S21 = sign_calcul(data_norm, gen)
+        y_corr[i] = S12[0], S21[0]
 
     # --- Visualisation ---
     plt.figure(figsize=(15,10))
-    for i, data in enumerate(dataset, 1):
+    for i, data in enumerate([y_ind,y_cde,y_corr], 1):
         plt.subplot(1,3,i)
-        plt.scatter(data[0], data[1])
+        plt.scatter(data[:,0], data[:,1])
         plt.title(i-1)
         plt.xlabel("S_12")
         plt.ylabel("S_21")
@@ -595,35 +640,35 @@ def test_with_data():
     plt.show()
 
     plt.figure(figsize=(15,10))
-    for i, data in enumerate(dataset, 1):
+    for i, data in enumerate([y_ind,y_cde,y_corr], 1):
         plt.subplot(1,3,i)
-        plt.hist(data[0], bins=20, color="tab:blue")
+        plt.hist(data[:,0], bins=20, color="tab:blue")
         plt.title(i-1)
         plt.ylabel("S_12")
-        graph_hdi(data[0])
-        peak_measure(data[0])
+        graph_hdi(data[:,0])
+        peak_measure(data[:,0])
     plt.tight_layout()
     plt.show()
 
     plt.figure(figsize=(15,10))
-    for i, data in enumerate(dataset, 1):
+    for i, data in enumerate([y_ind,y_cde,y_corr], 1):
         plt.subplot(1,3,i)
-        plt.hist(data[1], bins=20, color="tab:blue")
+        plt.hist(data[:,1], bins=20, color="tab:blue")
         plt.title(i-1)
         plt.ylabel("S_21")
-        graph_hdi(data[1])
-        peak_measure(data[1])
+        graph_hdi(data[:,1])
+        peak_measure(data[:,1])
     plt.tight_layout()
     plt.show()
 
     plt.figure(figsize=(15,10))
-    for i, data in enumerate(dataset, 1):
+    for i, data in enumerate([y_ind,y_cde,y_corr], 1):
         plt.subplot(1,3,i)
-        plt.hist(0.5*(data[0]-data[1]), bins=20, color="tab:blue")
+        plt.hist(0.5*(data[:,0]-data[:,1]), bins=20, color="tab:blue")
         plt.title(i-1)
         plt.ylabel("Levy area")
-        graph_hdi(0.5*(data[0]-data[1]))
-        peak_measure(0.5*(data[0]-data[1]))
+        graph_hdi(0.5*(data[:,0]-data[:,1]))
+        peak_measure(0.5*(data[:,0]-data[:,1]))
     plt.tight_layout()
     plt.show()
 
@@ -637,4 +682,4 @@ if __name__ == "__main__":
 
     signature_TS = Signature(depth = 2,scalar_term= True).to("cpu")
 
-    test_with_data()
+    datasets_creation_cde()
